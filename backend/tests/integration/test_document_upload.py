@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import create_app
 from app.models.base import Base, get_db
+from app.services.document_service import _compute_chunk_checksum
 
 
 @pytest.fixture
@@ -71,7 +72,7 @@ class TestUploadFlow:
 
             # Step 2: Upload chunk
             chunk_data = b"A" * 10
-            checksum = hashlib.md5(chunk_data).hexdigest()
+            checksum = _compute_chunk_checksum(chunk_data)
 
             chunk_res = client.post(
                 "/api/v1/documents/upload/chunk",
@@ -118,7 +119,7 @@ class TestUploadFlow:
             },
             headers={"X-Tenant-ID": "1"},
         )
-        assert res.status_code == 400
+        assert res.status_code == 413
         assert res.json()["error"]["code"] == "FILE_TOO_LARGE"
 
     def test_unsupported_file_type(self, client):
@@ -131,7 +132,7 @@ class TestUploadFlow:
             },
             headers={"X-Tenant-ID": "1"},
         )
-        assert res.status_code == 400
+        assert res.status_code == 415
         assert res.json()["error"]["code"] == "UNSUPPORTED_FILE_TYPE"
 
     def test_chunk_checksum_mismatch(self, client):

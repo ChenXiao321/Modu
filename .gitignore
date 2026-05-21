@@ -47,6 +47,11 @@ Thumbs.db
 coverage/
 .nyc_output/
 
+# SQLite
+*.db
+*.sqlite
+*.sqlite3
+
 # Logs
 logs/
 *.log

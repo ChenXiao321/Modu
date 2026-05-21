@@ -40,7 +40,7 @@ so that 平台可以开始解析和处理我的输入文档。
 - [x] Task 3: 测试与质量保障 (AC: 全部)
   - [x] Subtask 3.1: 后端单元测试：分片合并逻辑、文件存储路径生成、格式验证器
   - [x] Subtask 3.2: 后端集成测试：完整分片上传流程（初始化 → 多分片上传 → 合并 → 状态查询）
-  - [x] Subtask 3.3: 前端组件测试：上传 Hook 的进度计算、重试逻辑、错误处理（构建已通过，vitest 待运行）
+  - [x] Subtask 3.3: 前端组件测试：上传 Hook 的进度计算、重试逻辑、错误处理（vitest 7 项测试通过）
   - [x] Subtask 3.4: E2E 测试：模拟 50MB PDF 文件上传全流程（使用测试替身文件）（构建已通过，Playwright 待运行）
 
 ## Dev Notes
@@ -185,6 +185,7 @@ Claude (bmad-dev-story workflow)
 - 2026-05-20: 前端 TypeScript 编译错误修复（移除未使用的 computeChunkChecksum、添加 vite-env.d.ts）
 - 2026-05-20: 前端生产构建通过（npm run build success）
 - 2026-05-20: 本地 Python/Node 依赖已安装，环境就绪
+- 2026-05-21: 前端 vitest 测试补写完成（7 项测试全部通过）：文件大小限制、完整分片上传、重试机制、断点续传、暂停恢复、进度计算、合并失败错误处理
 
 ### File List
 

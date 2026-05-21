@@ -30,9 +30,7 @@ export async function uploadChunk(
   formData.append('checksum', checksum)
   formData.append('chunk_data', chunkBlob, `chunk_${chunkIndex}`)
 
-  await api.post('/documents/upload/chunk', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
+  await api.post('/documents/upload/chunk', formData)
 }
 
 export async function completeUpload(

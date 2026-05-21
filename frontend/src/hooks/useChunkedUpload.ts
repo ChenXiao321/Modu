@@ -116,19 +116,12 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
     }
 
     // Process chunks with concurrency limit
-    const executing: Promise<void>[] = []
+    const executing: Set<Promise<void>> = new Set()
     for (const index of chunksToUpload) {
-      const p = runChunk(index)
-      executing.push(p)
-      if (executing.length >= MAX_CONCURRENT_CHUNKS) {
+      const p = runChunk(index).finally(() => executing.delete(p))
+      executing.add(p)
+      if (executing.size >= MAX_CONCURRENT_CHUNKS) {
         await Promise.race(executing)
-        executing.splice(
-          0,
-          executing.length,
-          ...executing.filter((ex) =>
-            ex.then(() => false).catch(() => false) !== undefined
-          )
-        )
       }
     }
     await Promise.all(executing)
@@ -184,28 +177,10 @@ export function useChunkedUpload(): UseChunkedUploadReturn {
     setState((s) => ({ ...s, status: 'paused' }))
   }, [])
 
-  const resumeUpload = useCallback(async () => {
+  const resumeUpload = useCallback(() => {
     pausedRef.current = false
     setState((s) => ({ ...s, status: 'uploading' }))
-    const file = fileRef.current
-    const info = uploadInfoRef.current
-    if (file && info) {
-      try {
-        await uploadChunks(file, info.documentId, info.totalChunks)
-        const fileBuf = await file.arrayBuffer()
-        const hashBuf = await crypto.subtle.digest('SHA-256', fileBuf)
-        const sha256 = Array.from(new Uint8Array(hashBuf))
-          .map((b) => b.toString(16).padStart(2, '0'))
-          .join('')
-        await completeUpload(info.documentId, info.totalChunks, sha256)
-        clearUploadedChunks(info.documentId)
-        setState((s) => ({ ...s, status: 'completed', progress: 100 }))
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : '上传失败'
-        setState((s) => ({ ...s, status: 'error', error: msg }))
-      }
-    }
-  }, [uploadChunks])
+  }, [])
 
   return { state, uploadFile, pauseUpload, resumeUpload }
 }

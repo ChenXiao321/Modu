@@ -63,9 +63,20 @@ class DocumentNotFoundError(ModuException):
         )
 
 
+_EXCEPTION_STATUS_CODES: dict[str, int] = {
+    "FILE_TOO_LARGE": 413,
+    "UNSUPPORTED_FILE_TYPE": 415,
+    "DOCUMENT_NOT_FOUND": 404,
+    "CHUNK_UPLOAD_FAILED": 400,
+    "CHUNK_CHECKSUM_MISMATCH": 400,
+    "MERGE_FAILED": 400,
+}
+
+
 async def modu_exception_handler(request: Request, exc: ModuException) -> JSONResponse:
+    status_code = _EXCEPTION_STATUS_CODES.get(exc.error_code, 400)
     return JSONResponse(
-        status_code=400,
+        status_code=status_code,
         content={
             "success": False,
             "data": None,

@@ -1,9 +1,12 @@
 import hashlib
 import json
 import os
+import re
 import shutil
+import threading
 from pathlib import Path
 from uuid import uuid4
+from weakref import WeakValueDictionary
 
 from sqlalchemy.orm import Session
 
@@ -41,12 +44,40 @@ def _get_document_path(tenant_id: int, document_id: str) -> Path:
     return _get_tenant_path(tenant_id) / "documents" / document_id
 
 
+def _secure_filename(filename: str) -> str:
+    filename = re.sub(r'[\\/:*?"<>|]', '_', filename)
+    filename = filename.lstrip('.')
+    if not filename:
+        filename = 'unnamed'
+    return filename
+
+
+def _compute_chunk_checksum(chunk_data: bytes) -> str:
+    hash_val = 0
+    for b in chunk_data:
+        hash_val = (hash_val * 31 + b) & 0xFFFFFFFF
+    return format(hash_val, "08x")
+
+
 def _compute_file_sha256(file_path: Path) -> str:
     sha256 = hashlib.sha256()
     with open(file_path, "rb") as f:
         for chunk in iter(lambda: f.read(8192), b""):
             sha256.update(chunk)
     return sha256.hexdigest()
+
+
+_locks: WeakValueDictionary = WeakValueDictionary()
+_locks_lock = threading.Lock()
+
+
+def _get_lock(key: str) -> threading.Lock:
+    with _locks_lock:
+        lock = _locks.get(key)
+        if lock is None:
+            lock = threading.Lock()
+            _locks[key] = lock
+        return lock
 
 
 class DocumentService:
@@ -88,8 +119,8 @@ class DocumentService:
         if chunk_index < 0 or chunk_index >= doc.total_chunks:
             raise ChunkUploadError(chunk_index, "分片索引超出范围")
 
-        # 校验分片 checksum (simple md5 for chunk-level validation)
-        actual_checksum = hashlib.md5(chunk_data).hexdigest()
+        # 校验分片 checksum
+        actual_checksum = _compute_chunk_checksum(chunk_data)
         if actual_checksum != checksum:
             raise ChunkChecksumMismatchError(chunk_index)
 
@@ -100,7 +131,9 @@ class DocumentService:
         except OSError as e:
             raise ChunkUploadError(chunk_index, str(e))
 
-        doc = self.repo.update_uploaded_chunks(document_id, tenant_id, chunk_index)
+        lock = _get_lock(f"{tenant_id}:{document_id}")
+        with lock:
+            doc = self.repo.update_uploaded_chunks(document_id, tenant_id, chunk_index)
         if doc is None:
             raise DocumentNotFoundError(document_id)
 
@@ -129,7 +162,7 @@ class DocumentService:
         chunks_path = _get_chunks_path(tenant_id, document_id)
         doc_path = _get_document_path(tenant_id, document_id)
         doc_path.mkdir(parents=True, exist_ok=True)
-        final_file = doc_path / doc.original_filename
+        final_file = doc_path / _secure_filename(doc.original_filename)
 
         try:
             with open(final_file, "wb") as outfile:

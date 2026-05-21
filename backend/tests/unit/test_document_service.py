@@ -21,7 +21,7 @@ from app.exceptions import (
 from app.models.base import Base
 from app.models.document import Document
 from app.repositories.document_repository import DocumentRepository
-from app.services.document_service import DocumentService
+from app.services.document_service import DocumentService, _compute_chunk_checksum
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ class TestUploadChunk:
 
             doc_id = init_res["document_id"]
             chunk_data = b"test chunk data"
-            checksum = hashlib.md5(chunk_data).hexdigest()
+            checksum = _compute_chunk_checksum(chunk_data)
 
             result = service.upload_chunk(1, doc_id, 0, chunk_data, checksum)
 
@@ -126,7 +126,7 @@ class TestCompleteUpload:
             # Upload all chunks
             for i in range(2):
                 chunk_data = b"A" * 5
-                checksum = hashlib.md5(chunk_data).hexdigest()
+                checksum = _compute_chunk_checksum(chunk_data)
                 service.upload_chunk(1, doc_id, i, chunk_data, checksum)
 
             # Compute expected SHA-256
@@ -158,7 +158,7 @@ class TestCompleteUpload:
             doc_id = init_res["document_id"]
 
             chunk_data = b"A" * 5
-            checksum = hashlib.md5(chunk_data).hexdigest()
+            checksum = _compute_chunk_checksum(chunk_data)
             service.upload_chunk(1, doc_id, 0, chunk_data, checksum)
 
             with pytest.raises(MergeFailedError):
