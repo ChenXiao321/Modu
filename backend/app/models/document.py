@@ -19,3 +19,4 @@ class Document(Base, TenantMixin, TimestampMixin):
     total_chunks = Column(Integer, nullable=False, default=0)
     sha256_checksum = Column(String(64), nullable=True)
     parse_task_id = Column(String(100), nullable=True)
+    parse_status = Column(String(50), nullable=True)

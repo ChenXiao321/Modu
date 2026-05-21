@@ -1,10 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from app.dependencies import CurrentTenant
-from app.exceptions import ModuException
+from app.exceptions import DocumentNotFoundError, DocumentNotReadyError, ModuException
 from app.models.base import get_db
 from app.schemas.documents import (
     DocumentStatusResponse,
@@ -14,7 +14,9 @@ from app.schemas.documents import (
     UploadInitRequest,
     UploadInitResponse,
 )
+from app.services.document_parse_service import DocumentParseService
 from app.services.document_service import DocumentService
+from app.tasks.parse_document import schedule_parse
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
@@ -74,3 +76,72 @@ def get_document_status(
     svc = DocumentService(db)
     result = svc.get_status(tenant_id, document_id)
     return _wrap(result)
+
+
+@router.post("/{document_id}/parse", response_model=StandardResponse)
+def trigger_parse(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentParseService(db)
+    result = svc.trigger_parse(tenant_id, document_id)
+    schedule_parse(background_tasks, tenant_id, document_id)
+    return _wrap(result)
+
+
+@router.get("/{document_id}/parse/status", response_model=StandardResponse)
+def get_parse_status(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentParseService(db)
+    result = svc.get_parse_status(tenant_id, document_id)
+    return _wrap(result)
+
+
+@router.get("/{document_id}/requirements", response_model=StandardResponse)
+def get_requirements(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentParseService(db)
+    tree = svc.get_requirements_tree(tenant_id, document_id)
+    return _wrap({"document_id": document_id, "requirements": tree})
+
+
+@router.get("/{document_id}/safety-parameters", response_model=StandardResponse)
+def get_safety_parameters(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentParseService(db)
+    parameters = svc.get_safety_parameters(tenant_id, document_id)
+    return _wrap({"document_id": document_id, "parameters": parameters})
+
+
+@router.get("/", response_model=StandardResponse)
+def list_documents(
+    tenant_id: CurrentTenant,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentService(db)
+    docs = svc.list_documents(tenant_id)
+    items = []
+    for doc in docs:
+        items.append(
+            {
+                "document_id": doc.id,
+                "original_filename": doc.original_filename,
+                "file_type": doc.file_type,
+                "file_size_bytes": doc.file_size_bytes,
+                "upload_status": doc.upload_status,
+                "parse_status": doc.parse_status,
+                "created_at": doc.created_at.isoformat() if doc.created_at else None,
+            }
+        )
+    return _wrap({"items": items, "total": len(items)})

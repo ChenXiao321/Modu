@@ -1,5 +1,5 @@
 # generated: 2026-05-20
-# last_updated: 2026-05-20
+# last_updated: 2026-05-21
 # project: Modu
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev 将 Story 移至 review，然后运行 code-review（建议用不同的 LLM 获取新上下文）
 
 generated: 2026-05-20
-last_updated: 2026-05-20
+last_updated: 2026-05-21
 project: Modu
 project_key: NOKEY
 tracking_system: file-system
@@ -45,8 +45,8 @@ development_status:
   # Epic 1: 文档上传与智能解析
   epic-1: in-progress
   1-1-document-upload-and-chunked-transfer: done
-  1-2-document-parsing-and-structured-requirement-extraction: backlog
-  1-3-safety-critical-parameter-identification-and-traceable-registration: backlog
+  1-2-document-parsing-and-structured-requirement-extraction: done
+  1-3-safety-critical-parameter-identification-and-traceable-registration: done
   1-4-ocr-confidence-scoring-and-low-confidence-blocking: backlog
   epic-1-retrospective: optional
 

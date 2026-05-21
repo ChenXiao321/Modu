@@ -1,8 +1,15 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.exceptions import ModuException, modu_exception_handler
+from app.exceptions import (
+    DocumentNotReadyError,
+    ModuException,
+    modu_exception_handler,
+)
 from app.models.base import Base, engine
+from app.models.document import Document  # noqa: F401
+from app.models.parsed_requirement import ParsedRequirement  # noqa: F401
+from app.models.safety_critical_parameter import SafetyCriticalParameter  # noqa: F401
 from app.routers.v1 import documents
 
 def create_app() -> FastAPI:
@@ -17,6 +24,7 @@ def create_app() -> FastAPI:
     )
 
     app.add_exception_handler(ModuException, modu_exception_handler)
+    app.add_exception_handler(DocumentNotReadyError, modu_exception_handler)
 
     app.include_router(documents.router, prefix="/api/v1")
 

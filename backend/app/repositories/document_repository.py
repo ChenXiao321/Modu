@@ -60,3 +60,25 @@ class DocumentRepository:
         self.db.commit()
         self.db.refresh(doc)
         return doc
+
+    def update_parse_status(
+        self, document_id: str, tenant_id: int, parse_status: str, parse_task_id: str | None = None
+    ) -> Document | None:
+        doc = self.get_by_id(document_id, tenant_id)
+        if doc is None:
+            return None
+        doc.parse_status = parse_status
+        if parse_task_id is not None:
+            doc.parse_task_id = parse_task_id
+        self.db.commit()
+        self.db.refresh(doc)
+        return doc
+
+    def list_by_tenant(self, tenant_id: int) -> list[Document]:
+        from sqlalchemy import desc
+        return (
+            self.db.query(Document)
+            .filter(Document.tenant_id == tenant_id)
+            .order_by(desc(Document.created_at))
+            .all()
+        )

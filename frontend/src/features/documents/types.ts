@@ -25,3 +25,46 @@ export interface UploadCompleteResponse {
   storagePath: string
   sha256: string
 }
+
+export interface ParseTriggerResponse {
+  documentId: string
+  parseTaskId: string
+  status: string
+}
+
+export interface ParseStatusResponse {
+  documentId: string
+  status: string
+  progressPercent: number
+  message?: string
+}
+
+export interface RequirementTreeNode {
+  id: string
+  requirementId: string
+  description: string
+  chapter?: string
+  asilLevel?: string
+  children: RequirementTreeNode[]
+}
+
+export interface SafetyParameter {
+  id: string
+  parameterId: string
+  name: string
+  value: string
+  unit?: string
+  tolerance?: string
+  chapter?: string
+  sourcePage?: number
+}
+
+export interface DocumentListItem {
+  documentId: string
+  originalFilename: string
+  fileType: string
+  fileSizeBytes: number
+  uploadStatus: string
+  parseStatus?: string
+  createdAt?: string
+}

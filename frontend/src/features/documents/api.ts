@@ -1,6 +1,11 @@
 import api from '../../api/axios'
 import {
+  DocumentListItem,
   DocumentStatus,
+  ParseStatusResponse,
+  ParseTriggerResponse,
+  RequirementTreeNode,
+  SafetyParameter,
   UploadCompleteResponse,
   UploadInitResponse,
 } from './types'
@@ -49,4 +54,29 @@ export async function completeUpload(
 export async function getDocumentStatus(documentId: string): Promise<DocumentStatus> {
   const res = await api.get(`/documents/${documentId}/status`)
   return res.data.data
+}
+
+export async function triggerParse(documentId: string): Promise<ParseTriggerResponse> {
+  const res = await api.post(`/documents/${documentId}/parse`)
+  return res.data.data
+}
+
+export async function getParseStatus(documentId: string): Promise<ParseStatusResponse> {
+  const res = await api.get(`/documents/${documentId}/parse/status`)
+  return res.data.data
+}
+
+export async function getRequirements(documentId: string): Promise<RequirementTreeNode[]> {
+  const res = await api.get(`/documents/${documentId}/requirements`)
+  return res.data.data.requirements
+}
+
+export async function getSafetyParameters(documentId: string): Promise<SafetyParameter[]> {
+  const res = await api.get(`/documents/${documentId}/safety-parameters`)
+  return res.data.data.parameters
+}
+
+export async function listDocuments(): Promise<DocumentListItem[]> {
+  const res = await api.get('/documents')
+  return res.data.data.items
 }

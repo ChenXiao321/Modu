@@ -63,10 +63,20 @@ class DocumentNotFoundError(ModuException):
         )
 
 
+class DocumentNotReadyError(ModuException):
+    def __init__(self, document_id: str, reason: str) -> None:
+        super().__init__(
+            error_code="DOCUMENT_NOT_READY",
+            message=f"文档未就绪: {reason}",
+            detail={"document_id": document_id, "reason": reason},
+        )
+
+
 _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FILE_TOO_LARGE": 413,
     "UNSUPPORTED_FILE_TYPE": 415,
     "DOCUMENT_NOT_FOUND": 404,
+    "DOCUMENT_NOT_READY": 409,
     "CHUNK_UPLOAD_FAILED": 400,
     "CHUNK_CHECKSUM_MISMATCH": 400,
     "MERGE_FAILED": 400,

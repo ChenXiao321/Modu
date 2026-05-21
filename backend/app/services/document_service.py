@@ -10,6 +10,8 @@ from weakref import WeakValueDictionary
 
 from sqlalchemy.orm import Session
 
+import logging
+
 from app.config import settings
 from app.exceptions import (
     ChunkChecksumMismatchError,
@@ -21,6 +23,8 @@ from app.exceptions import (
 )
 from app.models.document import Document
 from app.repositories.document_repository import DocumentRepository
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_file(filename: str, file_size: int) -> None:
@@ -209,5 +213,9 @@ class DocumentService:
             "status": doc.upload_status,
             "progress_percent": progress,
             "parse_task_id": doc.parse_task_id,
+            "parse_status": doc.parse_status,
             "original_filename": doc.original_filename,
         }
+
+    def list_documents(self, tenant_id: int) -> list[Document]:
+        return self.repo.list_by_tenant(tenant_id)

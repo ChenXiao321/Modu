@@ -1,9 +1,11 @@
-import React, { useState, useCallback } from 'react'
+import React, { useState, useCallback, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Upload, Button, Alert, Space, message } from 'antd'
-import { InboxOutlined, PauseCircleOutlined, PlayCircleOutlined } from '@ant-design/icons'
+import { InboxOutlined, PauseCircleOutlined, PlayCircleOutlined, FileSearchOutlined } from '@ant-design/icons'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { MAX_UPLOAD_SIZE_MB } from '../../../config'
 import { useChunkedUpload } from '../../../hooks/useChunkedUpload'
+import { triggerParse } from '../api'
 import UploadProgress from './UploadProgress'
 
 const { Dragger } = Upload
@@ -22,8 +24,22 @@ const ALLOWED_TYPES = [
 const ALLOWED_EXTENSIONS = ['.pdf', '.docx', '.xlsx', '.pptx', '.ppt', '.txt', '.jpg', '.jpeg', '.png', '.tiff', '.tif']
 
 const DocumentUploader: React.FC = () => {
+  const navigate = useNavigate()
   const { state, uploadFile, pauseUpload, resumeUpload } = useChunkedUpload()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [parseTriggered, setParseTriggered] = useState(false)
+
+  const [parseError, setParseError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (state.status === 'completed' && state.documentId && !parseTriggered) {
+      setParseTriggered(true)
+      triggerParse(state.documentId).catch((e) => {
+        const msg = e instanceof Error ? e.message : '解析任务触发失败'
+        setParseError(msg)
+      })
+    }
+  }, [state.status, state.documentId, parseTriggered])
 
   const beforeUpload = useCallback((file: UploadFile) => {
     const rawFile = file as unknown as File
@@ -47,6 +63,9 @@ const DocumentUploader: React.FC = () => {
       }
     }
 
+    // Reset parse state for new file selection
+    setParseTriggered(false)
+    setParseError(null)
     setSelectedFile(rawFile)
     return false // Prevent default upload, we'll use chunked upload
   }, [])
@@ -105,9 +124,24 @@ const DocumentUploader: React.FC = () => {
 
       {state.status === 'completed' && state.documentId && (
         <Alert
-          message="上传成功"
-          description={`解析任务 ID: ${state.documentId}`}
+          message="上传成功，解析任务已触发"
+          description={`文档 ID: ${state.documentId}`}
           type="success"
+          showIcon
+          style={{ marginTop: 16 }}
+          action={
+            <Button size="small" icon={<FileSearchOutlined />} onClick={() => navigate('/documents')}>
+              查看文档列表
+            </Button>
+          }
+        />
+      )}
+
+      {parseError && (
+        <Alert
+          message="解析任务触发失败"
+          description={parseError}
+          type="warning"
           showIcon
           style={{ marginTop: 16 }}
         />
