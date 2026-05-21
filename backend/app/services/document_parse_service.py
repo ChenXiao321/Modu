@@ -4,11 +4,18 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
-from app.exceptions import DocumentNotFoundError, DocumentNotReadyError
+from app.exceptions import (
+    DocumentNotFoundError,
+    DocumentNotReadyError,
+    FieldAlreadyConfirmedError,
+    FieldNotFoundError,
+)
 from app.integrations.llm_client import LLMClient, MockLLMClient
 from app.models.document import Document
+from app.models.ocr_extraction_result import OcrExtractionResult
 from app.models.parsed_requirement import ParsedRequirement
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.ocr_result_repository import OcrResultRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.safety_parameter_repository import SafetyParameterRepository
 from app.models.safety_critical_parameter import SafetyCriticalParameter
@@ -20,12 +27,21 @@ _MAX_TREE_DEPTH = 10
 _MAX_REQUIREMENT_ID_LEN = 50
 
 
+_OCR_FILE_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/tiff",
+    "application/pdf",
+}
+
+
 class DocumentParseService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.doc_repo = DocumentRepository(db)
         self.req_repo = RequirementRepository(db)
         self.safety_repo = SafetyParameterRepository(db)
+        self.ocr_repo = OcrResultRepository(db)
         self.llm_client: LLMClient = MockLLMClient()
 
     def trigger_parse(self, tenant_id: int, document_id: str) -> dict:
@@ -88,6 +104,19 @@ class DocumentParseService:
                     self._persist_safety_parameters(tenant_id, document_id, raw_parameters)
             except Exception:
                 logger.exception("Safety parameter extraction failed for document %s", document_id)
+
+            # Extract OCR fields with confidence for scan/image documents
+            if self._is_ocr_document(doc):
+                try:
+                    raw_ocr_fields = self.llm_client.extract_ocr_fields(text, doc.original_filename)
+                    if raw_ocr_fields is not None:
+                        self.ocr_repo.delete_by_document(document_id, tenant_id)
+                        self._persist_ocr_results(tenant_id, document_id, raw_ocr_fields)
+                except Exception:
+                    logger.exception("OCR field extraction failed for document %s", document_id)
+
+            # Update pipeline block status based on low-confidence OCR fields
+            self._update_pipeline_block_status(tenant_id, document_id)
 
             self.doc_repo.update_parse_status(document_id, tenant_id, "completed")
             logger.info("Parse completed for document %s", document_id)
@@ -159,6 +188,8 @@ class DocumentParseService:
             "status": status,
             "progress_percent": progress,
             "message": None,
+            "pipeline_status": doc.pipeline_status or "ready",
+            "block_reason": doc.block_reason,
         }
 
     def _persist_safety_parameters(
@@ -233,4 +264,146 @@ class DocumentParseService:
             "chapter": req.chapter,
             "asil_level": req.asil_level,
             "children": [self._build_tree_node(child) for child in (req.children or [])],
+        }
+
+    def _is_ocr_document(self, doc: Document) -> bool:
+        """Determine if the document requires OCR confidence scoring."""
+        if doc.file_type in _OCR_FILE_TYPES:
+            return True
+        # Fallback: check filename extension for image types
+        lower_name = (doc.original_filename or "").lower()
+        if any(lower_name.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".tiff", ".tif")):
+            return True
+        return False
+
+    def _persist_ocr_results(
+        self,
+        tenant_id: int,
+        document_id: str,
+        raw_fields: List[dict],
+    ) -> None:
+        for raw in raw_fields:
+            field_id = raw.get("field_id")
+            extracted_text = raw.get("extracted_text")
+            confidence = raw.get("confidence")
+            if field_id is None or extracted_text is None or confidence is None:
+                raise ValueError("OCR 字段条目缺少 field_id、extracted_text 或 confidence")
+            if not str(field_id).strip() or not str(extracted_text).strip():
+                raise ValueError("OCR 字段条目 field_id 或 extracted_text 为空字符串")
+            try:
+                confidence = float(confidence)
+            except (ValueError, TypeError):
+                raise ValueError(f"OCR 字段 confidence 格式无效: {confidence}")
+            if not (0.0 <= confidence <= 1.0):
+                raise ValueError(f"OCR 字段 confidence 超出范围 [0.0, 1.0]: {confidence}")
+            if len(str(field_id)) > _MAX_REQUIREMENT_ID_LEN:
+                raise ValueError(f"field_id 超过最大长度 {_MAX_REQUIREMENT_ID_LEN}: {field_id}")
+
+            source_page = raw.get("source_page")
+            if source_page is not None:
+                try:
+                    source_page = int(source_page)
+                except (ValueError, TypeError):
+                    source_page = None
+
+            result = OcrExtractionResult(
+                tenant_id=tenant_id,
+                document_id=document_id,
+                field_id=str(field_id),
+                extracted_text=str(extracted_text),
+                normalized_value=raw.get("normalized_value"),
+                confidence=confidence,
+                field_type=raw.get("field_type"),
+                source_page=source_page,
+                review_status="pending",
+            )
+            self.ocr_repo.create(result)
+
+    def _update_pipeline_block_status(self, tenant_id: int, document_id: str) -> None:
+        """Update pipeline status based on low-confidence OCR fields."""
+        doc = self.doc_repo.get_by_id(document_id, tenant_id)
+        if doc is None:
+            return
+
+        # Non-OCR documents are always ready
+        if not self._is_ocr_document(doc):
+            if doc.pipeline_status != "in_design":
+                doc.pipeline_status = "ready"
+                doc.block_reason = None
+                self.db.commit()
+            return
+
+        low_conf_count = self.ocr_repo.get_low_confidence_count(document_id, tenant_id, threshold=0.95)
+        if low_conf_count > 0:
+            doc.pipeline_status = "blocked"
+            doc.block_reason = f"存在 {low_conf_count} 个低置信度 OCR 字段未复核"
+        else:
+            doc.pipeline_status = "ready"
+            doc.block_reason = None
+        self.db.commit()
+
+    def get_ocr_results(self, tenant_id: int, document_id: str) -> dict:
+        doc = self.doc_repo.get_by_id(document_id, tenant_id)
+        if doc is None:
+            raise DocumentNotFoundError(document_id)
+        if doc.parse_status not in ("completed", "running"):
+            return {
+                "document_id": document_id,
+                "pipeline_status": doc.pipeline_status or "ready",
+                "block_reason": doc.block_reason,
+                "fields": [],
+            }
+        fields = self.ocr_repo.get_by_document(document_id, tenant_id)
+        return {
+            "document_id": document_id,
+            "pipeline_status": doc.pipeline_status or "ready",
+            "block_reason": doc.block_reason,
+            "fields": [
+                {
+                    "id": f.id,
+                    "field_id": f.field_id,
+                    "extracted_text": f.extracted_text,
+                    "normalized_value": f.normalized_value,
+                    "confidence": f.confidence,
+                    "field_type": f.field_type,
+                    "source_page": f.source_page,
+                    "review_status": f.review_status,
+                    "reviewed_by": f.reviewed_by,
+                    "reviewed_at": f.reviewed_at.isoformat() if f.reviewed_at else None,
+                }
+                for f in fields
+            ],
+        }
+
+    def confirm_low_confidence_field(
+        self, tenant_id: int, document_id: str, field_id: str, reviewer: str
+    ) -> dict:
+        doc = self.doc_repo.get_by_id(document_id, tenant_id)
+        if doc is None:
+            raise DocumentNotFoundError(document_id)
+
+        field = self.ocr_repo.get_by_field_id(document_id, tenant_id, field_id)
+        if field is None:
+            raise FieldNotFoundError(field_id)
+        if field.review_status == "confirmed":
+            raise FieldAlreadyConfirmedError(field_id)
+
+        updated = self.ocr_repo.update_review_status(document_id, tenant_id, field_id, reviewer)
+        if updated is None:
+            raise FieldNotFoundError(field_id)
+
+        # Recalculate pipeline status after confirmation
+        self._update_pipeline_block_status(tenant_id, document_id)
+
+        # Refresh document to get updated pipeline status
+        self.db.refresh(doc)
+        low_conf_count = self.ocr_repo.get_low_confidence_count(document_id, tenant_id, threshold=0.95)
+
+        return {
+            "field_id": field_id,
+            "review_status": updated.review_status,
+            "reviewed_by": updated.reviewed_by,
+            "reviewed_at": updated.reviewed_at.isoformat() if updated.reviewed_at else None,
+            "pipeline_status": doc.pipeline_status,
+            "all_confirmed": low_conf_count == 0,
         }

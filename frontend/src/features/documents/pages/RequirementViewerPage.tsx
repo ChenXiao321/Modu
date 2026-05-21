@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, Typography, Button, Spin, Alert, Space, Tabs } from 'antd'
-import { ArrowLeftOutlined, SafetyOutlined, ApartmentOutlined } from '@ant-design/icons'
-import { getRequirements, getSafetyParameters } from '../api'
+import {
+  ArrowLeftOutlined,
+  SafetyOutlined,
+  ApartmentOutlined,
+  FileImageOutlined,
+  ExclamationCircleOutlined,
+  CheckCircleOutlined,
+} from '@ant-design/icons'
+import { getRequirements, getSafetyParameters, getOcrResults, confirmOcrField } from '../api'
 import RequirementTree from '../components/RequirementTree'
 import SafetyParameterTable from '../components/SafetyParameterTable'
-import type { RequirementTreeNode, SafetyParameter } from '../types'
+import OcrResultTable from '../components/OcrResultTable'
+import type { RequirementTreeNode, SafetyParameter, OcrField } from '../types'
 
 const { Title, Text } = Typography
 
@@ -14,8 +22,12 @@ const RequirementViewerPage: React.FC = () => {
   const navigate = useNavigate()
   const [requirements, setRequirements] = useState<RequirementTreeNode[]>([])
   const [safetyParameters, setSafetyParameters] = useState<SafetyParameter[]>([])
+  const [ocrFields, setOcrFields] = useState<OcrField[]>([])
+  const [pipelineStatus, setPipelineStatus] = useState<string>('ready')
+  const [blockReason, setBlockReason] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmingFieldId, setConfirmingFieldId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!documentId) return
@@ -23,12 +35,16 @@ const RequirementViewerPage: React.FC = () => {
       setLoading(true)
       setError(null)
       try {
-        const [reqs, params] = await Promise.all([
+        const [reqs, params, ocr] = await Promise.all([
           getRequirements(documentId),
           getSafetyParameters(documentId),
+          getOcrResults(documentId),
         ])
         setRequirements(reqs)
         setSafetyParameters(params)
+        setOcrFields(ocr.fields)
+        setPipelineStatus(ocr.pipelineStatus)
+        setBlockReason(ocr.blockReason)
       } catch (e) {
         setError(e instanceof Error ? e.message : '加载失败')
       } finally {
@@ -37,6 +53,38 @@ const RequirementViewerPage: React.FC = () => {
     }
     fetchData()
   }, [documentId])
+
+  const handleConfirmField = async (fieldId: string) => {
+    if (!documentId) return
+    setConfirmingFieldId(fieldId)
+    try {
+      const result = await confirmOcrField(documentId, fieldId, '工程师')
+      setOcrFields((prev) =>
+        prev.map((f) =>
+          f.fieldId === fieldId
+            ? {
+                ...f,
+                reviewStatus: result.reviewStatus,
+                reviewedBy: result.reviewedBy,
+                reviewedAt: result.reviewedAt,
+              }
+            : f
+        )
+      )
+      setPipelineStatus(result.pipelineStatus)
+      if (result.allConfirmed) {
+        setBlockReason(undefined)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '确认失败')
+    } finally {
+      setConfirmingFieldId(null)
+    }
+  }
+
+  const lowConfidenceCount = ocrFields.filter(
+    (f) => f.confidence < 0.95 && f.reviewStatus !== 'confirmed'
+  ).length
 
   const tabItems = [
     {
@@ -85,6 +133,45 @@ const RequirementViewerPage: React.FC = () => {
         </Card>
       ),
     },
+    {
+      key: 'ocr',
+      label: (
+        <span>
+          <FileImageOutlined />
+          OCR 提取结果
+          {ocrFields.length > 0 && (
+            <span style={{ marginLeft: 8 }}>({ocrFields.length})</span>
+          )}
+          {lowConfidenceCount > 0 && (
+            <span style={{ marginLeft: 4, color: '#ff4d4f', fontWeight: 700 }}>
+              !{lowConfidenceCount}
+            </span>
+          )}
+        </span>
+      ),
+      children: (
+        <Card
+          title={`OCR 提取字段列表${ocrFields.length > 0 ? `（共 ${ocrFields.length} 条）` : ''}`}
+        >
+          {ocrFields.length === 0 && !loading && (
+            <Alert
+              message="暂无 OCR 提取结果"
+              description="该文档为非扫描件格式，或解析尚未完成。"
+              type="info"
+              showIcon
+            />
+          )}
+          {ocrFields.length > 0 && (
+            <OcrResultTable
+              fields={ocrFields}
+              pipelineBlocked={pipelineStatus === 'blocked'}
+              onConfirm={handleConfirmField}
+              confirmingFieldId={confirmingFieldId}
+            />
+          )}
+        </Card>
+      ),
+    },
   ]
 
   return (
@@ -99,10 +186,36 @@ const RequirementViewerPage: React.FC = () => {
             返回文档列表
           </Button>
           <Title level={2}>结构化需求查看</Title>
-          <Text type="secondary">
-            文档 ID: {documentId}
-          </Text>
+          <Text type="secondary">文档 ID: {documentId}</Text>
         </div>
+
+        {pipelineStatus === 'blocked' && (
+          <Alert
+            message="流水线已阻塞"
+            description={blockReason || '存在未复核的低置信度 OCR 字段'}
+            type="error"
+            showIcon
+            icon={<ExclamationCircleOutlined />}
+            action={
+              <Button size="small" danger onClick={() => {
+                const ocrTab = document.querySelector('[data-node-key="ocr"]') as HTMLElement
+                ocrTab?.click()
+              }}>
+                前往复核
+              </Button>
+            }
+          />
+        )}
+
+        {pipelineStatus === 'ready' && ocrFields.length > 0 && lowConfidenceCount === 0 && (
+          <Alert
+            message="流水线状态正常"
+            description="所有低置信度字段已复核，可以进入方案设计阶段。"
+            type="success"
+            showIcon
+            icon={<CheckCircleOutlined />}
+          />
+        )}
 
         {loading && (
           <div style={{ textAlign: 'center', padding: 48 }}>
@@ -112,12 +225,7 @@ const RequirementViewerPage: React.FC = () => {
         )}
 
         {error && (
-          <Alert
-            message="加载失败"
-            description={error}
-            type="error"
-            showIcon
-          />
+          <Alert message="加载失败" description={error} type="error" showIcon />
         )}
 
         {!loading && !error && (

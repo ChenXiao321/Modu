@@ -72,6 +72,33 @@ class DocumentNotReadyError(ModuException):
         )
 
 
+class FieldNotFoundError(ModuException):
+    def __init__(self, field_id: str) -> None:
+        super().__init__(
+            error_code="FIELD_NOT_FOUND",
+            message=f"OCR 字段不存在: {field_id}",
+            detail={"field_id": field_id},
+        )
+
+
+class FieldAlreadyConfirmedError(ModuException):
+    def __init__(self, field_id: str) -> None:
+        super().__init__(
+            error_code="FIELD_ALREADY_CONFIRMED",
+            message=f"OCR 字段已被确认: {field_id}",
+            detail={"field_id": field_id},
+        )
+
+
+class PipelineNotBlockedError(ModuException):
+    def __init__(self, document_id: str) -> None:
+        super().__init__(
+            error_code="PIPELINE_NOT_BLOCKED",
+            message=f"流水线未阻塞，无需确认: {document_id}",
+            detail={"document_id": document_id},
+        )
+
+
 _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FILE_TOO_LARGE": 413,
     "UNSUPPORTED_FILE_TYPE": 415,
@@ -80,6 +107,9 @@ _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "CHUNK_UPLOAD_FAILED": 400,
     "CHUNK_CHECKSUM_MISMATCH": 400,
     "MERGE_FAILED": 400,
+    "FIELD_NOT_FOUND": 404,
+    "FIELD_ALREADY_CONFIRMED": 409,
+    "PIPELINE_NOT_BLOCKED": 409,
 }
 
 

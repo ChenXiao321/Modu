@@ -35,6 +35,21 @@ class LLMClient(ABC):
         """
         ...
 
+    @abstractmethod
+    def extract_ocr_fields(self, document_text: str, filename: str) -> list[dict]:
+        """
+        Extract OCR fields with confidence scores from document text.
+
+        Returns a list of field dicts, each with keys:
+        - field_id: str (e.g., OCR-FIELD-0001)
+        - extracted_text: str
+        - normalized_value: str | None
+        - confidence: float (0.0-1.0)
+        - field_type: str | None (voltage, temperature, timing, etc.)
+        - source_page: int | None
+        """
+        ...
+
 
 class MockLLMClient(LLMClient):
     """
@@ -153,3 +168,54 @@ class MockLLMClient(LLMClient):
         # Deterministically return a subset; short/empty docs may get zero params
         count = min(len(parameters), text_length % 4)
         return parameters[:count]
+
+    def extract_ocr_fields(self, document_text: str, filename: str) -> list[dict]:
+        """Return deterministic mock OCR fields with confidence scores."""
+        text_length = len(document_text)
+
+        fields = [
+            {
+                "field_id": "OCR-FIELD-0001",
+                "extracted_text": "4.5V ±0.1",
+                "normalized_value": "4.5",
+                "confidence": 0.98,
+                "field_type": "voltage",
+                "source_page": 42,
+            },
+            {
+                "field_id": "OCR-FIELD-0002",
+                "extracted_text": "-40 ~ 150°C",
+                "normalized_value": "-40~150",
+                "confidence": 0.96,
+                "field_type": "temperature",
+                "source_page": 43,
+            },
+            {
+                "field_id": "OCR-FIELD-0003",
+                "extracted_text": "50 ms (±5)",
+                "normalized_value": "50",
+                "confidence": 0.72,
+                "field_type": "timing",
+                "source_page": 48,
+            },
+            {
+                "field_id": "OCR-FIELD-0004",
+                "extracted_text": "l00ms init timeout",
+                "normalized_value": "100",
+                "confidence": 0.65,
+                "field_type": "timing",
+                "source_page": 38,
+            },
+            {
+                "field_id": "OCR-FIELD-0005",
+                "extracted_text": "3.3V reference",
+                "normalized_value": "3.3",
+                "confidence": 0.91,
+                "field_type": "voltage",
+                "source_page": 45,
+            },
+        ]
+
+        # Deterministically return a subset; ensure at least some low-confidence fields for testing
+        count = min(len(fields), max(1, text_length % 5))
+        return fields[:count]

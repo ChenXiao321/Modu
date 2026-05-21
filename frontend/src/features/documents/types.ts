@@ -59,6 +59,19 @@ export interface SafetyParameter {
   sourcePage?: number
 }
 
+export interface OcrField {
+  id: string
+  fieldId: string
+  extractedText: string
+  normalizedValue?: string
+  confidence: number
+  fieldType?: string
+  sourcePage?: number
+  reviewStatus: string
+  reviewedBy?: string
+  reviewedAt?: string
+}
+
 export interface DocumentListItem {
   documentId: string
   originalFilename: string
@@ -66,5 +79,7 @@ export interface DocumentListItem {
   fileSizeBytes: number
   uploadStatus: string
   parseStatus?: string
+  pipelineStatus?: string
+  blockReason?: string
   createdAt?: string
 }

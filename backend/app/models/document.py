@@ -20,3 +20,5 @@ class Document(Base, TenantMixin, TimestampMixin):
     sha256_checksum = Column(String(64), nullable=True)
     parse_task_id = Column(String(100), nullable=True)
     parse_status = Column(String(50), nullable=True)
+    pipeline_status = Column(String(20), nullable=False, default="ready")
+    block_reason = Column(String(255), nullable=True)

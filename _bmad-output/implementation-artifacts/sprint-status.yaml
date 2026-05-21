@@ -43,11 +43,11 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   # Epic 1: 文档上传与智能解析
-  epic-1: in-progress
+  epic-1: done
   1-1-document-upload-and-chunked-transfer: done
   1-2-document-parsing-and-structured-requirement-extraction: done
   1-3-safety-critical-parameter-identification-and-traceable-registration: done
-  1-4-ocr-confidence-scoring-and-low-confidence-blocking: backlog
+  1-4-ocr-confidence-scoring-and-low-confidence-blocking: done
   epic-1-retrospective: optional
 
   # Epic 2: 方案设计与审查协作

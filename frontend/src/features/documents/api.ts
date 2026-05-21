@@ -2,6 +2,7 @@ import api from '../../api/axios'
 import {
   DocumentListItem,
   DocumentStatus,
+  OcrField,
   ParseStatusResponse,
   ParseTriggerResponse,
   RequirementTreeNode,
@@ -74,6 +75,26 @@ export async function getRequirements(documentId: string): Promise<RequirementTr
 export async function getSafetyParameters(documentId: string): Promise<SafetyParameter[]> {
   const res = await api.get(`/documents/${documentId}/safety-parameters`)
   return res.data.data.parameters
+}
+
+export async function getOcrResults(documentId: string): Promise<{ pipelineStatus: string; blockReason?: string; fields: OcrField[] }> {
+  const res = await api.get(`/documents/${documentId}/ocr-results`)
+  return {
+    pipelineStatus: res.data.data.pipeline_status,
+    blockReason: res.data.data.block_reason,
+    fields: res.data.data.fields,
+  }
+}
+
+export async function confirmOcrField(
+  documentId: string,
+  fieldId: string,
+  reviewerName: string
+): Promise<{ fieldId: string; reviewStatus: string; reviewedBy: string; reviewedAt: string; pipelineStatus: string; allConfirmed: boolean }> {
+  const res = await api.post(`/documents/${documentId}/ocr-fields/${fieldId}/confirm`, {
+    reviewer_name: reviewerName,
+  })
+  return res.data.data
 }
 
 export async function listDocuments(): Promise<DocumentListItem[]> {

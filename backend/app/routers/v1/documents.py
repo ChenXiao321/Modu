@@ -14,6 +14,7 @@ from app.schemas.documents import (
     UploadInitRequest,
     UploadInitResponse,
 )
+from app.schemas.requirements import ConfirmFieldRequest
 from app.services.document_parse_service import DocumentParseService
 from app.services.document_service import DocumentService
 from app.tasks.parse_document import schedule_parse
@@ -124,6 +125,30 @@ def get_safety_parameters(
     return _wrap({"document_id": document_id, "parameters": parameters})
 
 
+@router.get("/{document_id}/ocr-results", response_model=StandardResponse)
+def get_ocr_results(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentParseService(db)
+    result = svc.get_ocr_results(tenant_id, document_id)
+    return _wrap(result)
+
+
+@router.post("/{document_id}/ocr-fields/{field_id}/confirm", response_model=StandardResponse)
+def confirm_ocr_field(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    field_id: str,
+    req: ConfirmFieldRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentParseService(db)
+    result = svc.confirm_low_confidence_field(tenant_id, document_id, field_id, req.reviewer_name)
+    return _wrap(result)
+
+
 @router.get("/", response_model=StandardResponse)
 def list_documents(
     tenant_id: CurrentTenant,
@@ -141,6 +166,8 @@ def list_documents(
                 "file_size_bytes": doc.file_size_bytes,
                 "upload_status": doc.upload_status,
                 "parse_status": doc.parse_status,
+                "pipeline_status": doc.pipeline_status,
+                "block_reason": doc.block_reason,
                 "created_at": doc.created_at.isoformat() if doc.created_at else None,
             }
         )
