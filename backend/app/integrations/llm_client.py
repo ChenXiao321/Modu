@@ -50,6 +50,26 @@ class LLMClient(ABC):
         """
         ...
 
+    @abstractmethod
+    def generate_design_document(
+        self,
+        requirements: list[dict],
+        safety_parameters: list[dict],
+        asil_level: str | None,
+        filename: str,
+    ) -> dict:
+        """
+        Generate an ASPICE Level 2 design document from structured requirements.
+
+        Returns a dict with section keys, each containing:
+        - content: str
+        - polarion_trace_id: str
+
+        Sections: overview, references, system_architecture, interface_definition,
+        dynamic_behavior, resource_consumption, error_handling, test_strategy
+        """
+        ...
+
 
 class MockLLMClient(LLMClient):
     """
@@ -220,3 +240,103 @@ class MockLLMClient(LLMClient):
         # both high-confidence and low-confidence fields are present.
         count = min(len(fields), 3)
         return fields[:count]
+
+    def generate_design_document(
+        self,
+        requirements: list[dict],
+        safety_parameters: list[dict],
+        asil_level: str | None,
+        filename: str,
+    ) -> dict:
+        """Return a deterministic mock design document for MVP development."""
+        effective_asil = asil_level or "QM"
+        base_trace = f"POL-DSGN-{len(filename) % 1000:03d}"
+
+        req_summary = "\n".join(
+            f"- {r.get('requirement_id', 'N/A')}: {r.get('description', '')[:80]}"
+            for r in requirements[:3]
+        )
+        param_summary = "\n".join(
+            f"- {p.get('parameter_id', 'N/A')}: {p.get('name', '')} = {p.get('value', '')} {p.get('unit', '')}"
+            for p in safety_parameters[:3]
+        )
+
+        return {
+            "overview": {
+                "content": (
+                    f"本文档描述基于 {filename} 的软件模块设计方案。\n"
+                    f"模块 ASIL 等级声明: ASIL-{effective_asil}。\n"
+                    f"设计目标: 实现芯片手册定义的功能需求，满足车规级安全与可靠性要求。"
+                ),
+                "polarion_trace_id": f"{base_trace}-001",
+            },
+            "references": {
+                "content": (
+                    "[1] 上游输入文档: 芯片手册 / 需求规格\n"
+                    "[2] AUTOSAR Classic Platform 标准 (R20-11)\n"
+                    "[3] MISRA C:2012 编码规范\n"
+                    "[4] ASPICE Level 2 过程要求"
+                ),
+                "polarion_trace_id": f"{base_trace}-002",
+            },
+            "system_architecture": {
+                "content": (
+                    "模块采用分层架构设计:\n"
+                    "- 应用层: 实现业务逻辑与状态机\n"
+                    "- 服务层: 封装硬件访问接口\n"
+                    "- MCAL 层: 通过标准化接口调用微控制器驱动\n"
+                    f"安全机制: 针对 ASIL-{effective_asil} 等级注入看门狗监控与冗余检查。"
+                ),
+                "polarion_trace_id": f"{base_trace}-003",
+            },
+            "interface_definition": {
+                "content": (
+                    "公共接口:\n"
+                    "- Modu_<Module>_Init(void): 模块初始化\n"
+                    "- Modu_<Module>_MainFunction(void): 周期主函数\n"
+                    "- Modu_<Module>_GetVersionInfo(Std_VersionInfoType* versioninfo): 版本查询\n"
+                    "回调接口: 通过配置结构体注入，便于单元测试 Mock。"
+                ),
+                "polarion_trace_id": f"{base_trace}-004",
+            },
+            "dynamic_behavior": {
+                "content": (
+                    "状态机定义:\n"
+                    "- INIT: 上电初始化，配置寄存器为安全默认值\n"
+                    "- RUNNING: 正常业务处理周期\n"
+                    "- SAFE_STATE: 故障检测后进入安全状态\n"
+                    "状态转换由外部事件或内部超时触发，转换条件在配置头文件中定义。"
+                ),
+                "polarion_trace_id": f"{base_trace}-005",
+            },
+            "resource_consumption": {
+                "content": (
+                    "资源消耗估算 (TC38x 目标):\n"
+                    "- ROM: ~8 KB (代码 + 常量表)\n"
+                    "- RAM: ~2 KB (全局变量 + 运行时缓冲区)\n"
+                    "- 堆栈: 最大深度估计 512 字节\n"
+                    "- CPU 负载: 主函数周期 10ms，单次执行 < 500 µs"
+                ),
+                "polarion_trace_id": f"{base_trace}-006",
+            },
+            "error_handling": {
+                "content": (
+                    "错误处理策略:\n"
+                    "- 检测到电压异常: 触发 SAFE_STATE，记录 DTC\n"
+                    "- 看门狗超时: 触发系统复位\n"
+                    "- 非法寄存器访问: 返回 E_NOT_OK，不上报致命错误\n"
+                    "所有错误处理路径均具备独立的测试覆盖。"
+                ),
+                "polarion_trace_id": f"{base_trace}-007",
+            },
+            "test_strategy": {
+                "content": (
+                    "测试策略覆盖:\n"
+                    "- 单元测试: 基于 Mock/Stub 环境，覆盖所有公共接口\n"
+                    "- 边界测试: 数值型参数最小值、最大值、典型值\n"
+                    "- 故障注入: 通信超时、电源异常、看门狗复位\n"
+                    f"覆盖率目标: 语句 ≥ {90 if effective_asil == 'B' else 80}%，分支 ≥ 80%。"
+                ),
+                "polarion_trace_id": f"{base_trace}-008",
+            },
+        }

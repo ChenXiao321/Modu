@@ -72,6 +72,19 @@ export interface OcrField {
   reviewedAt?: string
 }
 
+export interface DesignSection {
+  content: string
+  polarionTraceId: string
+}
+
+export interface DesignDocument {
+  documentId: string
+  status: string
+  asilLevel?: string
+  sections?: Record<string, DesignSection>
+  errorMessage?: string
+}
+
 export interface DocumentListItem {
   documentId: string
   originalFilename: string

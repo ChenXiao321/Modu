@@ -15,8 +15,10 @@ from app.schemas.documents import (
     UploadInitResponse,
 )
 from app.schemas.requirements import ConfirmFieldRequest
+from app.services.design_document_service import DesignDocumentService
 from app.services.document_parse_service import DocumentParseService
 from app.services.document_service import DocumentService
+from app.tasks.generate_design_document import schedule_generate_design_document
 from app.tasks.parse_document import schedule_parse
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -146,6 +148,30 @@ def confirm_ocr_field(
 ) -> dict:
     svc = DocumentParseService(db)
     result = svc.confirm_low_confidence_field(tenant_id, document_id, field_id, req.reviewer_name)
+    return _wrap(result)
+
+
+@router.post("/{document_id}/design", response_model=StandardResponse)
+def trigger_design_document(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignDocumentService(db)
+    result = svc.trigger_generate(tenant_id, document_id)
+    schedule_generate_design_document(background_tasks, tenant_id, document_id)
+    return _wrap(result)
+
+
+@router.get("/{document_id}/design", response_model=StandardResponse)
+def get_design_document(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignDocumentService(db)
+    result = svc.get_design_document(tenant_id, document_id)
     return _wrap(result)
 
 

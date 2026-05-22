@@ -99,6 +99,15 @@ class PipelineNotBlockedError(ModuException):
         )
 
 
+class PipelineBlockedError(ModuException):
+    def __init__(self, document_id: str, reason: str) -> None:
+        super().__init__(
+            error_code="PIPELINE_BLOCKED",
+            message=f"流水线阻塞，无法继续: {reason}",
+            detail={"document_id": document_id, "reason": reason},
+        )
+
+
 _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FILE_TOO_LARGE": 413,
     "UNSUPPORTED_FILE_TYPE": 415,
@@ -110,6 +119,7 @@ _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FIELD_NOT_FOUND": 404,
     "FIELD_ALREADY_CONFIRMED": 409,
     "PIPELINE_NOT_BLOCKED": 409,
+    "PIPELINE_BLOCKED": 409,
 }
 
 

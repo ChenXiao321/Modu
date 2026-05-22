@@ -71,6 +71,13 @@ const DocumentListPage: React.FC = () => {
           >
             查看需求
           </Button>
+          <Button
+            type="link"
+            onClick={() => navigate(`/documents/${record.documentId}/design`)}
+            disabled={record.parseStatus !== 'completed'}
+          >
+            设计文档
+          </Button>
         </Space>
       ),
     },

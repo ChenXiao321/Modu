@@ -1,0 +1,1418 @@
+diff --git a/_bmad-output/implementation-artifacts/sprint-status.yaml b/_bmad-output/implementation-artifacts/sprint-status.yaml
+index b7b9eb7..8b037b6 100644
+--- a/_bmad-output/implementation-artifacts/sprint-status.yaml
++++ b/_bmad-output/implementation-artifacts/sprint-status.yaml
+@@ -51,8 +51,8 @@ development_status:
+   epic-1-retrospective: optional
+ 
+   # Epic 2: 方案设计与审查协作
+-  epic-2: backlog
+-  2-1-design-document-auto-generation: backlog
++  epic-2: in-progress
++  2-1-design-document-auto-generation: done
+   2-2-design-document-split-screen-review-and-online-correction: backlog
+   2-3-design-verification-gate-and-review-record-locking: backlog
+   epic-2-retrospective: optional
+diff --git a/backend/app/exceptions.py b/backend/app/exceptions.py
+index 359d5ba..86a98fb 100644
+--- a/backend/app/exceptions.py
++++ b/backend/app/exceptions.py
+@@ -99,6 +99,24 @@ class PipelineNotBlockedError(ModuException):
+         )
+ 
+ 
++class PipelineBlockedError(ModuException):
++    def __init__(self, document_id: str, reason: str) -> None:
++        super().__init__(
++            error_code="PIPELINE_BLOCKED",
++            message=f"流水线阻塞，无法继续: {reason}",
++            detail={"document_id": document_id, "reason": reason},
++        )
++
++
++class DesignDocumentNotFoundError(ModuException):
++    def __init__(self, document_id: str) -> None:
++        super().__init__(
++            error_code="DESIGN_DOCUMENT_NOT_FOUND",
++            message=f"设计文档不存在: {document_id}",
++            detail={"document_id": document_id},
++        )
++
++
+ _EXCEPTION_STATUS_CODES: dict[str, int] = {
+     "FILE_TOO_LARGE": 413,
+     "UNSUPPORTED_FILE_TYPE": 415,
+@@ -110,6 +128,8 @@ _EXCEPTION_STATUS_CODES: dict[str, int] = {
+     "FIELD_NOT_FOUND": 404,
+     "FIELD_ALREADY_CONFIRMED": 409,
+     "PIPELINE_NOT_BLOCKED": 409,
++    "PIPELINE_BLOCKED": 409,
++    "DESIGN_DOCUMENT_NOT_FOUND": 404,
+ }
+ 
+ 
+diff --git a/backend/app/integrations/llm_client.py b/backend/app/integrations/llm_client.py
+index 13712eb..9657532 100644
+--- a/backend/app/integrations/llm_client.py
++++ b/backend/app/integrations/llm_client.py
+@@ -50,6 +50,26 @@ class LLMClient(ABC):
+         """
+         ...
+ 
++    @abstractmethod
++    def generate_design_document(
++        self,
++        requirements: list[dict],
++        safety_parameters: list[dict],
++        asil_level: str | None,
++        filename: str,
++    ) -> dict:
++        """
++        Generate an ASPICE Level 2 design document from structured requirements.
++
++        Returns a dict with section keys, each containing:
++        - content: str
++        - polarion_trace_id: str
++
++        Sections: overview, references, system_architecture, interface_definition,
++        dynamic_behavior, resource_consumption, error_handling, test_strategy
++        """
++        ...
++
+ 
+ class MockLLMClient(LLMClient):
+     """
+@@ -220,3 +240,103 @@ class MockLLMClient(LLMClient):
+         # both high-confidence and low-confidence fields are present.
+         count = min(len(fields), 3)
+         return fields[:count]
++
++    def generate_design_document(
++        self,
++        requirements: list[dict],
++        safety_parameters: list[dict],
++        asil_level: str | None,
++        filename: str,
++    ) -> dict:
++        """Return a deterministic mock design document for MVP development."""
++        effective_asil = asil_level or "B"
++        base_trace = f"POL-DSGN-{len(filename) % 1000:03d}"
++
++        req_summary = "\n".join(
++            f"- {r.get('requirement_id', 'N/A')}: {r.get('description', '')[:80]}"
++            for r in requirements[:3]
++        )
++        param_summary = "\n".join(
++            f"- {p.get('parameter_id', 'N/A')}: {p.get('name', '')} = {p.get('value', '')} {p.get('unit', '')}"
++            for p in safety_parameters[:3]
++        )
++
++        return {
++            "overview": {
++                "content": (
++                    f"本文档描述基于 {filename} 的软件模块设计方案。\n"
++                    f"模块 ASIL 等级声明: ASIL-{effective_asil}。\n"
++                    f"设计目标: 实现芯片手册定义的功能需求，满足车规级安全与可靠性要求。"
++                ),
++                "polarion_trace_id": f"{base_trace}-001",
++            },
++            "references": {
++                "content": (
++                    "[1] 上游输入文档: 芯片手册 / 需求规格\n"
++                    "[2] AUTOSAR Classic Platform 标准 (R20-11)\n"
++                    "[3] MISRA C:2012 编码规范\n"
++                    "[4] ASPICE Level 2 过程要求"
++                ),
++                "polarion_trace_id": f"{base_trace}-002",
++            },
++            "system_architecture": {
++                "content": (
++                    "模块采用分层架构设计:\n"
++                    "- 应用层: 实现业务逻辑与状态机\n"
++                    "- 服务层: 封装硬件访问接口\n"
++                    "- MCAL 层: 通过标准化接口调用微控制器驱动\n"
++                    f"安全机制: 针对 ASIL-{effective_asil} 等级注入看门狗监控与冗余检查。"
++                ),
++                "polarion_trace_id": f"{base_trace}-003",
++            },
++            "interface_definition": {
++                "content": (
++                    "公共接口:\n"
++                    "- Modu_<Module>_Init(void): 模块初始化\n"
++                    "- Modu_<Module>_MainFunction(void): 周期主函数\n"
++                    "- Modu_<Module>_GetVersionInfo(Std_VersionInfoType* versioninfo): 版本查询\n"
++                    "回调接口: 通过配置结构体注入，便于单元测试 Mock。"
++                ),
++                "polarion_trace_id": f"{base_trace}-004",
++            },
++            "dynamic_behavior": {
++                "content": (
++                    "状态机定义:\n"
++                    "- INIT: 上电初始化，配置寄存器为安全默认值\n"
++                    "- RUNNING: 正常业务处理周期\n"
++                    "- SAFE_STATE: 故障检测后进入安全状态\n"
++                    "状态转换由外部事件或内部超时触发，转换条件在配置头文件中定义。"
++                ),
++                "polarion_trace_id": f"{base_trace}-005",
++            },
++            "resource_consumption": {
++                "content": (
++                    "资源消耗估算 (TC38x 目标):\n"
++                    "- ROM: ~8 KB (代码 + 常量表)\n"
++                    "- RAM: ~2 KB (全局变量 + 运行时缓冲区)\n"
++                    "- 堆栈: 最大深度估计 512 字节\n"
++                    "- CPU 负载: 主函数周期 10ms，单次执行 < 500 µs"
++                ),
++                "polarion_trace_id": f"{base_trace}-006",
++            },
++            "error_handling": {
++                "content": (
++                    "错误处理策略:\n"
++                    "- 检测到电压异常: 触发 SAFE_STATE，记录 DTC\n"
++                    "- 看门狗超时: 触发系统复位\n"
++                    "- 非法寄存器访问: 返回 E_NOT_OK，不上报致命错误\n"
++                    "所有错误处理路径均具备独立的测试覆盖。"
++                ),
++                "polarion_trace_id": f"{base_trace}-007",
++            },
++            "test_strategy": {
++                "content": (
++                    "测试策略覆盖:\n"
++                    "- 单元测试: 基于 Mock/Stub 环境，覆盖所有公共接口\n"
++                    "- 边界测试: 数值型参数最小值、最大值、典型值\n"
++                    "- 故障注入: 通信超时、电源异常、看门狗复位\n"
++                    f"覆盖率目标: 语句 ≥ {90 if effective_asil == 'B' else 80}%，分支 ≥ 80%。"
++                ),
++                "polarion_trace_id": f"{base_trace}-008",
++            },
++        }
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 234cbe4..6fa4308 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -7,6 +7,7 @@ from app.exceptions import (
+     modu_exception_handler,
+ )
+ from app.models.base import Base, engine
++from app.models.design_document import DesignDocument  # noqa: F401
+ from app.models.document import Document  # noqa: F401
+ from app.models.parsed_requirement import ParsedRequirement  # noqa: F401
+ from app.models.safety_critical_parameter import SafetyCriticalParameter  # noqa: F401
+@@ -25,6 +26,9 @@ def create_app() -> FastAPI:
+ 
+     app.add_exception_handler(ModuException, modu_exception_handler)
+     app.add_exception_handler(DocumentNotReadyError, modu_exception_handler)
++    from app.exceptions import PipelineBlockedError, DesignDocumentNotFoundError
++    app.add_exception_handler(PipelineBlockedError, modu_exception_handler)
++    app.add_exception_handler(DesignDocumentNotFoundError, modu_exception_handler)
+ 
+     app.include_router(documents.router, prefix="/api/v1")
+ 
+diff --git a/backend/app/models/design_document.py b/backend/app/models/design_document.py
+new file mode 100644
+index 0000000..1bae182
+--- /dev/null
++++ b/backend/app/models/design_document.py
+@@ -0,0 +1,21 @@
++import uuid
++
++from sqlalchemy import Column, ForeignKey, JSON, String, Text
++from sqlalchemy.orm import relationship
++
++from app.models.base import Base, TenantMixin, TimestampMixin
++
++
++class DesignDocument(Base, TenantMixin, TimestampMixin):
++    __tablename__ = "design_documents"
++
++    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
++    document_id = Column(
++        String(36), ForeignKey("documents.id"), nullable=False, index=True
++    )
++    status = Column(String(20), nullable=False, default="pending")
++    asil_level = Column(String(10), nullable=True)
++    sections = Column(JSON, nullable=True)
++    error_message = Column(Text, nullable=True)
++
++    document = relationship("Document", backref="design_document", uselist=False)
+diff --git a/backend/app/repositories/design_document_repository.py b/backend/app/repositories/design_document_repository.py
+new file mode 100644
+index 0000000..39e9370
+--- /dev/null
++++ b/backend/app/repositories/design_document_repository.py
+@@ -0,0 +1,49 @@
++from sqlalchemy.orm import Session
++
++from app.models.design_document import DesignDocument
++
++
++class DesignDocumentRepository:
++    def __init__(self, db: Session) -> None:
++        self.db = db
++
++    def create(self, design_doc: DesignDocument) -> DesignDocument:
++        self.db.add(design_doc)
++        self.db.commit()
++        self.db.refresh(design_doc)
++        return design_doc
++
++    def get_by_document_id(
++        self, document_id: str, tenant_id: int
++    ) -> DesignDocument | None:
++        return (
++            self.db.query(DesignDocument)
++            .filter(
++                DesignDocument.document_id == document_id,
++                DesignDocument.tenant_id == tenant_id,
++            )
++            .first()
++        )
++
++    def update_status(
++        self,
++        document_id: str,
++        tenant_id: int,
++        status: str,
++        sections: dict | None = None,
++        asil_level: str | None = None,
++        error_message: str | None = None,
++    ) -> DesignDocument | None:
++        doc = self.get_by_document_id(document_id, tenant_id)
++        if doc is None:
++            return None
++        doc.status = status
++        if sections is not None:
++            doc.sections = sections
++        if asil_level is not None:
++            doc.asil_level = asil_level
++        if error_message is not None:
++            doc.error_message = error_message
++        self.db.commit()
++        self.db.refresh(doc)
++        return doc
+diff --git a/backend/app/routers/v1/documents.py b/backend/app/routers/v1/documents.py
+index 87f4604..722140a 100644
+--- a/backend/app/routers/v1/documents.py
++++ b/backend/app/routers/v1/documents.py
+@@ -15,8 +15,10 @@ from app.schemas.documents import (
+     UploadInitResponse,
+ )
+ from app.schemas.requirements import ConfirmFieldRequest
++from app.services.design_document_service import DesignDocumentService
+ from app.services.document_parse_service import DocumentParseService
+ from app.services.document_service import DocumentService
++from app.tasks.generate_design_document import schedule_generate_design_document
+ from app.tasks.parse_document import schedule_parse
+ 
+ router = APIRouter(prefix="/documents", tags=["Documents"])
+@@ -149,6 +151,30 @@ def confirm_ocr_field(
+     return _wrap(result)
+ 
+ 
++@router.post("/{document_id}/design", response_model=StandardResponse)
++def trigger_design_document(
++    tenant_id: CurrentTenant,
++    document_id: str,
++    background_tasks: BackgroundTasks,
++    db: Session = Depends(get_db),
++) -> dict:
++    svc = DesignDocumentService(db)
++    result = svc.trigger_generate(tenant_id, document_id)
++    schedule_generate_design_document(background_tasks, tenant_id, document_id)
++    return _wrap(result)
++
++
++@router.get("/{document_id}/design", response_model=StandardResponse)
++def get_design_document(
++    tenant_id: CurrentTenant,
++    document_id: str,
++    db: Session = Depends(get_db),
++) -> dict:
++    svc = DesignDocumentService(db)
++    result = svc.get_design_document(tenant_id, document_id)
++    return _wrap(result)
++
++
+ @router.get("/", response_model=StandardResponse)
+ def list_documents(
+     tenant_id: CurrentTenant,
+diff --git a/backend/app/services/design_document_service.py b/backend/app/services/design_document_service.py
+new file mode 100644
+index 0000000..1f58218
+--- /dev/null
++++ b/backend/app/services/design_document_service.py
+@@ -0,0 +1,199 @@
++import logging
++import uuid
++from typing import List
++
++from sqlalchemy.orm import Session
++
++from app.exceptions import (
++    DocumentNotFoundError,
++    DocumentNotReadyError,
++    PipelineBlockedError,
++)
++from app.integrations.llm_client import LLMClient, MockLLMClient
++from app.models.design_document import DesignDocument
++from app.repositories.design_document_repository import DesignDocumentRepository
++from app.repositories.document_repository import DocumentRepository
++from app.repositories.requirement_repository import RequirementRepository
++from app.repositories.safety_parameter_repository import SafetyParameterRepository
++
++logger = logging.getLogger(__name__)
++
++_ASIL_ORDER = {"A": 1, "B": 2, "C": 3, "D": 4}
++
++
++class DesignDocumentService:
++    def __init__(self, db: Session) -> None:
++        self.db = db
++        self.doc_repo = DocumentRepository(db)
++        self.design_repo = DesignDocumentRepository(db)
++        self.req_repo = RequirementRepository(db)
++        self.safety_repo = SafetyParameterRepository(db)
++        self.llm_client: LLMClient = MockLLMClient()
++
++    def trigger_generate(self, tenant_id: int, document_id: str) -> dict:
++        doc = self.doc_repo.get_by_id(document_id, tenant_id)
++        if doc is None:
++            raise DocumentNotFoundError(document_id)
++        if doc.parse_status != "completed":
++            raise DocumentNotReadyError(document_id, "文档解析尚未完成")
++        if doc.pipeline_status == "blocked":
++            raise PipelineBlockedError(
++                document_id, doc.block_reason or "流水线存在阻塞项未解除"
++            )
++
++        existing = self.design_repo.get_by_document_id(document_id, tenant_id)
++        if existing is not None and existing.status == "running":
++            raise DocumentNotReadyError(document_id, "设计文档生成任务已在进行中")
++
++        design_task_id = str(uuid.uuid4())
++        if existing is None:
++            design_doc = DesignDocument(
++                id=design_task_id,
++                tenant_id=tenant_id,
++                document_id=document_id,
++                status="running",
++            )
++            self.design_repo.create(design_doc)
++        else:
++            self.design_repo.update_status(
++                document_id, tenant_id, "running", sections=None, error_message=None
++            )
++
++        return {
++            "document_id": document_id,
++            "design_task_id": design_task_id,
++            "status": "running",
++        }
++
++    def execute_generate(self, tenant_id: int, document_id: str) -> None:
++        """Synchronous design document generation. Intended to be run in background."""
++        doc = self.doc_repo.get_by_id(document_id, tenant_id)
++        if doc is None:
++            logger.warning("Design generation aborted: document %s not found", document_id)
++            return
++        if doc.parse_status != "completed":
++            logger.warning(
++                "Design generation aborted: document %s parse_status=%s",
++                document_id,
++                doc.parse_status,
++            )
++            self.design_repo.update_status(
++                document_id, tenant_id, "failed", error_message="文档解析尚未完成"
++            )
++            return
++        if doc.pipeline_status == "blocked":
++            logger.warning(
++                "Design generation aborted: document %s pipeline blocked", document_id
++            )
++            self.design_repo.update_status(
++                document_id,
++                tenant_id,
++                "failed",
++                error_message=f"流水线阻塞: {doc.block_reason}",
++            )
++            return
++
++        try:
++            requirements = self._build_requirements_list(
++                self.req_repo.get_roots_by_document(document_id, tenant_id)
++            )
++            safety_parameters = self.safety_repo.get_by_document(document_id, tenant_id)
++            safety_params_list = [
++                {
++                    "parameter_id": p.parameter_id,
++                    "name": p.name,
++                    "value": p.value,
++                    "unit": p.unit,
++                    "tolerance": p.tolerance,
++                    "chapter": p.chapter,
++                }
++                for p in safety_parameters
++            ]
++
++            asil_level = self._resolve_asil_level(requirements)
++
++            sections = self.llm_client.generate_design_document(
++                requirements=requirements,
++                safety_parameters=safety_params_list,
++                asil_level=asil_level,
++                filename=doc.original_filename,
++            )
++
++            self.design_repo.update_status(
++                document_id,
++                tenant_id,
++                "completed",
++                sections=sections,
++                asil_level=asil_level,
++            )
++
++            # Transition pipeline to in_design phase
++            doc.pipeline_status = "in_design"
++            doc.block_reason = None
++            self.db.commit()
++
++            logger.info("Design document generation completed for document %s", document_id)
++        except Exception:
++            logger.exception("Design document generation failed for document %s", document_id)
++            self.design_repo.update_status(
++                document_id,
++                tenant_id,
++                "failed",
++                error_message="设计文档生成过程中发生未知错误",
++            )
++
++    def get_design_document(self, tenant_id: int, document_id: str) -> dict:
++        doc = self.doc_repo.get_by_id(document_id, tenant_id)
++        if doc is None:
++            raise DocumentNotFoundError(document_id)
++
++        design = self.design_repo.get_by_document_id(document_id, tenant_id)
++        if design is None:
++            return {
++                "document_id": document_id,
++                "status": "pending",
++                "asil_level": None,
++                "sections": None,
++                "error_message": None,
++            }
++
++        return {
++            "document_id": document_id,
++            "status": design.status,
++            "asil_level": design.asil_level,
++            "sections": design.sections,
++            "error_message": design.error_message,
++        }
++
++    def _build_requirements_list(
++        self, roots: List
++    ) -> list[dict]:
++        result = []
++        for r in roots:
++            node = {
++                "requirement_id": r.requirement_id,
++                "description": r.description,
++                "chapter": r.chapter,
++                "asil_level": r.asil_level,
++                "children": self._build_requirements_list(r.children or []),
++            }
++            result.append(node)
++        return result
++
++    def _resolve_asil_level(self, requirements: list[dict]) -> str | None:
++        """Extract the highest ASIL level from requirements; default to B if none found."""
++        levels = set()
++        self._collect_asil_levels(requirements, levels)
++        if not levels:
++            return "B"
++        # Return the highest ASIL level
++        sorted_levels = sorted(levels, key=lambda x: _ASIL_ORDER.get(x, 0), reverse=True)
++        return sorted_levels[0]
++
++    def _collect_asil_levels(self, requirements: list[dict], levels: set) -> None:
++        for req in requirements:
++            level = req.get("asil_level")
++            if level:
++                levels.add(level.upper())
++            children = req.get("children") or []
++            self._collect_asil_levels(children, levels)
+diff --git a/backend/app/tasks/generate_design_document.py b/backend/app/tasks/generate_design_document.py
+new file mode 100644
+index 0000000..9e68d5e
+--- /dev/null
++++ b/backend/app/tasks/generate_design_document.py
+@@ -0,0 +1,54 @@
++import logging
++
++from fastapi import BackgroundTasks
++
++from app.models.base import SessionLocal
++from app.repositories.design_document_repository import DesignDocumentRepository
++from app.services.design_document_service import DesignDocumentService
++
++logger = logging.getLogger(__name__)
++
++
++def schedule_generate_design_document(
++    background_tasks: BackgroundTasks, tenant_id: int, document_id: str
++) -> None:
++    """Schedule design document generation as a background task."""
++    background_tasks.add_task(_run_generate, tenant_id, document_id)
++
++
++def _run_generate(tenant_id: int, document_id: str) -> None:
++    db = SessionLocal()
++    try:
++        design_repo = DesignDocumentRepository(db)
++        design = design_repo.get_by_document_id(document_id, tenant_id)
++        if design is None:
++            logger.warning(
++                "Background design generation skipped: design doc for document %s not found",
++                document_id,
++            )
++            return
++        if design.status != "running":
++            logger.warning(
++                "Background design generation skipped: design status=%s (expected running)",
++                design.status,
++            )
++            return
++
++        service = DesignDocumentService(db)
++        service.execute_generate(tenant_id, document_id)
++    except Exception:
++        logger.exception("Background design generation crashed for document %s", document_id)
++        try:
++            design_repo = DesignDocumentRepository(db)
++            design_repo.update_status(
++                document_id,
++                tenant_id,
++                "failed",
++                error_message="后台任务执行异常",
++            )
++        except Exception:
++            logger.exception(
++                "Failed to mark design document %s as failed after crash", document_id
++            )
++    finally:
++        db.close()
+diff --git a/backend/tests/unit/test_design_document_repository.py b/backend/tests/unit/test_design_document_repository.py
+new file mode 100644
+index 0000000..421b3aa
+--- /dev/null
++++ b/backend/tests/unit/test_design_document_repository.py
+@@ -0,0 +1,97 @@
++import pytest
++from sqlalchemy import create_engine
++from sqlalchemy.orm import sessionmaker
++
++from app.models.base import Base
++from app.models.design_document import DesignDocument
++from app.repositories.design_document_repository import DesignDocumentRepository
++
++
++@pytest.fixture
++def db_session():
++    engine = create_engine("sqlite:///:memory:", echo=False)
++    Base.metadata.create_all(bind=engine)
++    Session = sessionmaker(bind=engine)
++    session = Session()
++    yield session
++    session.close()
++
++
++class TestDesignDocumentRepository:
++    def test_create_and_get_by_document_id(self, db_session):
++        repo = DesignDocumentRepository(db_session)
++        design = DesignDocument(
++            tenant_id=1,
++            document_id="doc-1",
++            status="pending",
++            asil_level="B",
++            sections={
++                "overview": {
++                    "content": "Test overview",
++                    "polarion_trace_id": "POL-DSGN-001",
++                }
++            },
++        )
++        created = repo.create(design)
++        assert created.id is not None
++        assert created.document_id == "doc-1"
++        assert created.status == "pending"
++
++        fetched = repo.get_by_document_id("doc-1", 1)
++        assert fetched is not None
++        assert fetched.asil_level == "B"
++        assert fetched.sections["overview"]["content"] == "Test overview"
++
++    def test_update_status(self, db_session):
++        repo = DesignDocumentRepository(db_session)
++        repo.create(
++            DesignDocument(
++                tenant_id=1,
++                document_id="doc-2",
++                status="running",
++            )
++        )
++
++        updated = repo.update_status(
++            "doc-2",
++            1,
++            "completed",
++            sections={
++                "test_strategy": {
++                    "content": "Test strategy content",
++                    "polarion_trace_id": "POL-DSGN-008",
++                }
++            },
++            asil_level="C",
++        )
++        assert updated is not None
++        assert updated.status == "completed"
++        assert updated.asil_level == "C"
++        assert updated.sections["test_strategy"]["polarion_trace_id"] == "POL-DSGN-008"
++
++    def test_get_by_document_id_not_found(self, db_session):
++        repo = DesignDocumentRepository(db_session)
++        result = repo.get_by_document_id("nonexistent", 1)
++        assert result is None
++
++    def test_update_status_not_found(self, db_session):
++        repo = DesignDocumentRepository(db_session)
++        result = repo.update_status("nonexistent", 1, "failed")
++        assert result is None
++
++    def test_update_status_with_error_message(self, db_session):
++        repo = DesignDocumentRepository(db_session)
++        repo.create(
++            DesignDocument(
++                tenant_id=1,
++                document_id="doc-3",
++                status="running",
++            )
++        )
++
++        updated = repo.update_status(
++            "doc-3", 1, "failed", error_message="LLM API timeout"
++        )
++        assert updated is not None
++        assert updated.status == "failed"
++        assert updated.error_message == "LLM API timeout"
+diff --git a/backend/tests/unit/test_design_document_service.py b/backend/tests/unit/test_design_document_service.py
+new file mode 100644
+index 0000000..e87ac7a
+--- /dev/null
++++ b/backend/tests/unit/test_design_document_service.py
+@@ -0,0 +1,347 @@
++import pytest
++from sqlalchemy import create_engine
++from sqlalchemy.orm import sessionmaker
++
++from app.exceptions import DocumentNotFoundError, DocumentNotReadyError, PipelineBlockedError
++from app.models.base import Base
++from app.models.design_document import DesignDocument
++from app.models.document import Document
++from app.models.parsed_requirement import ParsedRequirement
++from app.models.safety_critical_parameter import SafetyCriticalParameter
++from app.repositories.design_document_repository import DesignDocumentRepository
++from app.services.design_document_service import DesignDocumentService
++
++
++@pytest.fixture
++def db_session():
++    engine = create_engine(
++        "sqlite:///:memory:",
++        connect_args={"check_same_thread": False},
++    )
++    Base.metadata.create_all(bind=engine)
++    Session = sessionmaker(bind=engine)
++    session = Session()
++    yield session
++    session.close()
++
++
++class TestTriggerGenerate:
++    def test_trigger_generate_success(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="completed",
++            pipeline_status="ready",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        result = svc.trigger_generate(1, doc.id)
++
++        assert result["document_id"] == doc.id
++        assert result["status"] == "running"
++        assert result["design_task_id"] is not None
++
++        # Verify DB record created
++        design = DesignDocumentRepository(db_session).get_by_document_id(doc.id, 1)
++        assert design is not None
++        assert design.status == "running"
++
++    def test_trigger_generate_document_not_found(self, db_session):
++        svc = DesignDocumentService(db_session)
++        with pytest.raises(DocumentNotFoundError):
++            svc.trigger_generate(1, "nonexistent-id")
++
++    def test_trigger_generate_parse_not_completed(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="pending",
++            pipeline_status="ready",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        with pytest.raises(DocumentNotReadyError) as exc_info:
++            svc.trigger_generate(1, doc.id)
++        assert "解析尚未完成" in str(exc_info.value)
++
++    def test_trigger_generate_pipeline_blocked(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="completed",
++            pipeline_status="blocked",
++            block_reason="存在 2 个低置信度 OCR 字段未复核",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        with pytest.raises(PipelineBlockedError) as exc_info:
++            svc.trigger_generate(1, doc.id)
++        assert "阻塞" in exc_info.value.message
++
++    def test_trigger_generate_already_running(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="completed",
++            pipeline_status="ready",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        design = DesignDocument(
++            tenant_id=1,
++            document_id=doc.id,
++            status="running",
++        )
++        db_session.add(design)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        with pytest.raises(DocumentNotReadyError) as exc_info:
++            svc.trigger_generate(1, doc.id)
++        assert "已在进行中" in str(exc_info.value)
++
++
++class TestExecuteGenerate:
++    def test_execute_generate_success(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="completed",
++            pipeline_status="ready",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        # Seed requirements with ASIL level
++        req = ParsedRequirement(
++            tenant_id=1,
++            document_id=doc.id,
++            requirement_id="SW-REQ-001",
++            description="System shall monitor voltage.",
++            chapter="3.1",
++            asil_level="C",
++        )
++        db_session.add(req)
++        db_session.commit()
++
++        design = DesignDocument(
++            tenant_id=1,
++            document_id=doc.id,
++            status="running",
++        )
++        db_session.add(design)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        svc.execute_generate(1, doc.id)
++
++        # Refresh from DB
++        db_session.refresh(design)
++        db_session.refresh(doc)
++
++        assert design.status == "completed"
++        assert design.asil_level == "C"
++        assert design.sections is not None
++        assert "overview" in design.sections
++        assert "polarion_trace_id" in design.sections["overview"]
++        assert doc.pipeline_status == "in_design"
++
++    def test_execute_generate_document_not_found(self, db_session):
++        svc = DesignDocumentService(db_session)
++        # Should not raise, just log warning and return
++        svc.execute_generate(1, "nonexistent-id")
++
++        # Nothing persisted
++        assert DesignDocumentRepository(db_session).get_by_document_id("nonexistent-id", 1) is None
++
++    def test_execute_generate_parse_not_completed(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="pending",
++            pipeline_status="ready",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        design = DesignDocument(
++            tenant_id=1,
++            document_id=doc.id,
++            status="running",
++        )
++        db_session.add(design)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        svc.execute_generate(1, doc.id)
++
++        db_session.refresh(design)
++        assert design.status == "failed"
++        assert "解析尚未完成" in (design.error_message or "")
++
++    def test_execute_generate_pipeline_blocked(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="completed",
++            pipeline_status="blocked",
++            block_reason="OCR 低置信度",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        design = DesignDocument(
++            tenant_id=1,
++            document_id=doc.id,
++            status="running",
++        )
++        db_session.add(design)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        svc.execute_generate(1, doc.id)
++
++        db_session.refresh(design)
++        assert design.status == "failed"
++        assert "阻塞" in (design.error_message or "")
++
++
++class TestGetDesignDocument:
++    def test_get_design_document_pending(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="completed",
++            pipeline_status="ready",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        result = svc.get_design_document(1, doc.id)
++
++        assert result["document_id"] == doc.id
++        assert result["status"] == "pending"
++        assert result["sections"] is None
++
++    def test_get_design_document_completed(self, db_session):
++        doc = Document(
++            tenant_id=1,
++            original_filename="test.pdf",
++            file_type="application/pdf",
++            file_size_bytes=100,
++            upload_status="completed",
++            parse_status="completed",
++            pipeline_status="in_design",
++            total_chunks=1,
++            uploaded_chunks="[0]",
++        )
++        db_session.add(doc)
++        db_session.commit()
++
++        design = DesignDocument(
++            tenant_id=1,
++            document_id=doc.id,
++            status="completed",
++            asil_level="B",
++            sections={
++                "overview": {
++                    "content": "Overview content",
++                    "polarion_trace_id": "POL-DSGN-001",
++                }
++            },
++        )
++        db_session.add(design)
++        db_session.commit()
++
++        svc = DesignDocumentService(db_session)
++        result = svc.get_design_document(1, doc.id)
++
++        assert result["status"] == "completed"
++        assert result["asil_level"] == "B"
++        assert result["sections"]["overview"]["content"] == "Overview content"
++
++    def test_get_design_document_not_found(self, db_session):
++        svc = DesignDocumentService(db_session)
++        with pytest.raises(DocumentNotFoundError):
++            svc.get_design_document(1, "nonexistent-id")
++
++
++class TestResolveAsilLevel:
++    def test_resolve_asil_level_from_requirements(self, db_session):
++        svc = DesignDocumentService(db_session)
++        requirements = [
++            {
++                "requirement_id": "R1",
++                "description": "Desc",
++                "asil_level": "A",
++                "children": [
++                    {
++                        "requirement_id": "R1-1",
++                        "description": "Child",
++                        "asil_level": "D",
++                        "children": [],
++                    }
++                ],
++            }
++        ]
++        assert svc._resolve_asil_level(requirements) == "D"
++
++    def test_resolve_asil_level_defaults_to_b(self, db_session):
++        svc = DesignDocumentService(db_session)
++        requirements = [
++            {
++                "requirement_id": "R1",
++                "description": "Desc",
++                "asil_level": None,
++                "children": [],
++            }
++        ]
++        assert svc._resolve_asil_level(requirements) == "B"
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index ad1f53b..5dbf46a 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
+ import DocumentUploadPage from './features/documents/pages/DocumentUploadPage'
+ import DocumentListPage from './features/documents/pages/DocumentListPage'
+ import RequirementViewerPage from './features/documents/pages/RequirementViewerPage'
++import DesignDocumentPage from './features/documents/pages/DesignDocumentPage'
+ 
+ const App: React.FC = () => {
+   return (
+@@ -11,6 +12,7 @@ const App: React.FC = () => {
+         <Route path="/" element={<DocumentUploadPage />} />
+         <Route path="/documents" element={<DocumentListPage />} />
+         <Route path="/documents/:documentId/requirements" element={<RequirementViewerPage />} />
++        <Route path="/documents/:documentId/design" element={<DesignDocumentPage />} />
+       </Routes>
+     </BrowserRouter>
+   )
+diff --git a/frontend/src/features/documents/api.ts b/frontend/src/features/documents/api.ts
+index 435c292..cc9b22a 100644
+--- a/frontend/src/features/documents/api.ts
++++ b/frontend/src/features/documents/api.ts
+@@ -1,5 +1,6 @@
+ import api from '../../api/axios'
+ import {
++  DesignDocument,
+   DocumentListItem,
+   DocumentStatus,
+   OcrField,
+@@ -103,6 +104,16 @@ export async function confirmOcrField(
+   return res.data.data
+ }
+ 
++export async function triggerDesignDocument(documentId: string): Promise<{ documentId: string; designTaskId: string; status: string }> {
++  const res = await api.post(`/documents/${documentId}/design`)
++  return res.data.data
++}
++
++export async function getDesignDocument(documentId: string): Promise<DesignDocument> {
++  const res = await api.get(`/documents/${documentId}/design`)
++  return res.data.data
++}
++
+ export async function listDocuments(): Promise<DocumentListItem[]> {
+   const res = await api.get('/documents')
+   return res.data.data.items
+diff --git a/frontend/src/features/documents/pages/DesignDocumentPage.tsx b/frontend/src/features/documents/pages/DesignDocumentPage.tsx
+new file mode 100644
+index 0000000..453c032
+--- /dev/null
++++ b/frontend/src/features/documents/pages/DesignDocumentPage.tsx
+@@ -0,0 +1,226 @@
++import React, { useEffect, useState } from 'react'
++import { useParams, useNavigate } from 'react-router-dom'
++import {
++  Card,
++  Typography,
++  Button,
++  Spin,
++  Alert,
++  Space,
++  Tag,
++  Descriptions,
++  Divider,
++} from 'antd'
++import {
++  ArrowLeftOutlined,
++  FileTextOutlined,
++  ReloadOutlined,
++  BookOutlined,
++  ClusterOutlined,
++  ApiOutlined,
++  ThunderboltOutlined,
++  BugOutlined,
++  SafetyOutlined,
++  ExperimentOutlined,
++} from '@ant-design/icons'
++import { getDesignDocument, triggerDesignDocument } from '../api'
++import type { DesignDocument, DesignSection } from '../types'
++
++const { Title, Text, Paragraph } = Typography
++
++const sectionConfig: Record<
++  string,
++  { label: string; icon: React.ReactNode }
++> = {
++  overview: { label: '概述', icon: <FileTextOutlined /> },
++  references: { label: '引用文档', icon: <BookOutlined /> },
++  system_architecture: { label: '系统架构', icon: <ClusterOutlined /> },
++  interface_definition: { label: '接口定义', icon: <ApiOutlined /> },
++  dynamic_behavior: { label: '动态行为', icon: <ThunderboltOutlined /> },
++  resource_consumption: { label: '资源消耗估算', icon: <ExperimentOutlined /> },
++  error_handling: { label: '错误处理策略', icon: <BugOutlined /> },
++  test_strategy: { label: '测试策略', icon: <SafetyOutlined /> },
++}
++
++const SectionCard: React.FC<{ sectionKey: string; section: DesignSection }> = ({
++  sectionKey,
++  section,
++}) => {
++  const config = sectionConfig[sectionKey] || { label: sectionKey, icon: null }
++  return (
++    <Card
++      title={
++        <Space>
++          {config.icon}
++          <span>{config.label}</span>
++        </Space>
++      }
++      style={{ marginBottom: 16 }}
++      extra={
++        <Tag color="blue">Polarion: {section.polarionTraceId}</Tag>
++      }
++    >
++      <Paragraph style={{ whiteSpace: 'pre-wrap' }}>{section.content}</Paragraph>
++    </Card>
++  )
++}
++
++const DesignDocumentPage: React.FC = () => {
++  const { documentId } = useParams<{ documentId: string }>()
++  const navigate = useNavigate()
++  const [designDoc, setDesignDoc] = useState<DesignDocument | null>(null)
++  const [loading, setLoading] = useState(false)
++  const [generating, setGenerating] = useState(false)
++  const [error, setError] = useState<string | null>(null)
++  const [pollInterval, setPollInterval] = useState<ReturnType<
++    typeof setInterval
++  > | null>(null)
++
++  const fetchDesignDoc = async () => {
++    if (!documentId) return
++    setLoading(true)
++    setError(null)
++    try {
++      const data = await getDesignDocument(documentId)
++      setDesignDoc(data)
++    } catch (e) {
++      setError(e instanceof Error ? e.message : '加载设计文档失败')
++    } finally {
++      setLoading(false)
++    }
++  }
++
++  useEffect(() => {
++    fetchDesignDoc()
++    return () => {
++      if (pollInterval) clearInterval(pollInterval)
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [documentId])
++
++  useEffect(() => {
++    if (designDoc?.status === 'running' && !pollInterval) {
++      const interval = setInterval(() => {
++        fetchDesignDoc()
++      }, 2000)
++      setPollInterval(interval)
++    } else if (designDoc?.status !== 'running' && pollInterval) {
++      clearInterval(pollInterval)
++      setPollInterval(null)
++    }
++    // eslint-disable-next-line react-hooks/exhaustive-deps
++  }, [designDoc?.status])
++
++  const handleGenerate = async () => {
++    if (!documentId) return
++    setGenerating(true)
++    setError(null)
++    try {
++      await triggerDesignDocument(documentId)
++      await fetchDesignDoc()
++    } catch (e) {
++      setError(e instanceof Error ? e.message : '触发设计文档生成失败')
++    } finally {
++      setGenerating(false)
++    }
++  }
++
++  const statusTag = (status: string | undefined) => {
++    switch (status) {
++      case 'completed':
++        return <Tag color="green">已完成</Tag>
++      case 'running':
++        return <Tag color="blue">生成中</Tag>
++      case 'failed':
++        return <Tag color="red">失败</Tag>
++      case 'pending':
++      default:
++        return <Tag>待生成</Tag>
++    }
++  }
++
++  return (
++    <div style={{ padding: 24, maxWidth: 1200, margin: '0 auto' }}>
++      <Space direction="vertical" size="large" style={{ width: '100%' }}>
++        <div>
++          <Button
++            icon={<ArrowLeftOutlined />}
++            onClick={() => navigate(`/documents/${documentId}/requirements`)}
++            style={{ marginBottom: 16 }}
++          >
++            返回需求查看
++          </Button>
++          <Title level={2}>设计文档</Title>
++          <Text type="secondary">文档 ID: {documentId}</Text>
++        </div>
++
++        {error && (
++          <Alert message="错误" description={error} type="error" showIcon />
++        )}
++
++        <Card>
++          <Descriptions title="设计文档状态" bordered>
++            <Descriptions.Item label="生成状态">
++              {statusTag(designDoc?.status)}
++            </Descriptions.Item>
++            <Descriptions.Item label="ASIL 等级">
++              {designDoc?.asilLevel ? `ASIL-${designDoc.asilLevel}` : '-'}
++            </Descriptions.Item>
++          </Descriptions>
++          <Divider />
++          {designDoc?.status === 'pending' && (
++            <Button
++              type="primary"
++              onClick={handleGenerate}
++              loading={generating}
++            >
++              生成设计文档
++            </Button>
++          )}
++          {(designDoc?.status === 'completed' || designDoc?.status === 'failed') && (
++            <Button
++              icon={<ReloadOutlined />}
++              onClick={handleGenerate}
++              loading={generating}
++            >
++              重新生成
++            </Button>
++          )}
++        </Card>
++
++        {designDoc?.status === 'running' && (
++          <div style={{ textAlign: 'center', padding: 48 }}>
++            <Spin size="large" />
++            <div style={{ marginTop: 16 }}>AI 正在生成设计文档，请稍候...</div>
++          </div>
++        )}
++
++        {designDoc?.status === 'failed' && designDoc.errorMessage && (
++          <Alert
++            message="生成失败"
++            description={designDoc.errorMessage}
++            type="error"
++            showIcon
++          />
++        )}
++
++        {designDoc?.status === 'completed' && designDoc.sections && (
++          <div>
++            {Object.entries(designDoc.sections).map(([key, section]) => (
++              <SectionCard key={key} sectionKey={key} section={section} />
++            ))}
++          </div>
++        )}
++
++        {loading && !designDoc && (
++          <div style={{ textAlign: 'center', padding: 48 }}>
++            <Spin size="large" />
++            <div style={{ marginTop: 16 }}>正在加载...</div>
++          </div>
++        )}
++      </Space>
++    </div>
++  )
++}
++
++export default DesignDocumentPage
+diff --git a/frontend/src/features/documents/pages/DocumentListPage.tsx b/frontend/src/features/documents/pages/DocumentListPage.tsx
+index e5a03d2..5eabb79 100644
+--- a/frontend/src/features/documents/pages/DocumentListPage.tsx
++++ b/frontend/src/features/documents/pages/DocumentListPage.tsx
+@@ -71,6 +71,13 @@ const DocumentListPage: React.FC = () => {
+           >
+             查看需求
+           </Button>
++          <Button
++            type="link"
++            onClick={() => navigate(`/documents/${record.documentId}/design`)}
++            disabled={record.parseStatus !== 'completed'}
++          >
++            设计文档
++          </Button>
+         </Space>
+       ),
+     },
+diff --git a/frontend/src/features/documents/pages/RequirementViewerPage.tsx b/frontend/src/features/documents/pages/RequirementViewerPage.tsx
+index b6960ec..8479941 100644
+--- a/frontend/src/features/documents/pages/RequirementViewerPage.tsx
++++ b/frontend/src/features/documents/pages/RequirementViewerPage.tsx
+@@ -8,6 +8,7 @@ import {
+   FileImageOutlined,
+   ExclamationCircleOutlined,
+   CheckCircleOutlined,
++  FileTextOutlined,
+ } from '@ant-design/icons'
+ import { getRequirements, getSafetyParameters, getOcrResults, confirmOcrField } from '../api'
+ import RequirementTree from '../components/RequirementTree'
+@@ -223,13 +224,22 @@ const RequirementViewerPage: React.FC = () => {
+           </div>
+         )}
+ 
+-        {pipelineStatus === 'ready' && ocrFields.length > 0 && lowConfidenceCount === 0 && (
++        {(pipelineStatus === 'ready' || pipelineStatus === 'in_design') && (
+           <Alert
+             message="流水线状态正常"
+-            description="所有低置信度字段已复核，可以进入方案设计阶段。"
++            description="文档解析已完成，可以进入方案设计阶段。"
+             type="success"
+             showIcon
+             icon={<CheckCircleOutlined />}
++            action={
++              <Button
++                type="primary"
++                icon={<FileTextOutlined />}
++                onClick={() => navigate(`/documents/${documentId}/design`)}
++              >
++                进入方案设计
++              </Button>
++            }
+           />
+         )}
+ 
+diff --git a/frontend/src/features/documents/types.ts b/frontend/src/features/documents/types.ts
+index 9d34159..b93a236 100644
+--- a/frontend/src/features/documents/types.ts
++++ b/frontend/src/features/documents/types.ts
+@@ -72,6 +72,19 @@ export interface OcrField {
+   reviewedAt?: string
+ }
+ 
++export interface DesignSection {
++  content: string
++  polarionTraceId: string
++}
++
++export interface DesignDocument {
++  documentId: string
++  status: string
++  asilLevel?: string
++  sections?: Record<string, DesignSection>
++  errorMessage?: string
++}
++
+ export interface DocumentListItem {
+   documentId: string
+   originalFilename: string

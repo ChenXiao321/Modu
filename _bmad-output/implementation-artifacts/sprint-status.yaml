@@ -51,8 +51,8 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: 方案设计与审查协作
-  epic-2: backlog
-  2-1-design-document-auto-generation: backlog
+  epic-2: in-progress
+  2-1-design-document-auto-generation: done
   2-2-design-document-split-screen-review-and-online-correction: backlog
   2-3-design-verification-gate-and-review-record-locking: backlog
   epic-2-retrospective: optional

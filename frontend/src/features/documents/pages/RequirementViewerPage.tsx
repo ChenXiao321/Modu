@@ -8,6 +8,7 @@ import {
   FileImageOutlined,
   ExclamationCircleOutlined,
   CheckCircleOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons'
 import { getRequirements, getSafetyParameters, getOcrResults, confirmOcrField } from '../api'
 import RequirementTree from '../components/RequirementTree'
@@ -223,13 +224,22 @@ const RequirementViewerPage: React.FC = () => {
           </div>
         )}
 
-        {pipelineStatus === 'ready' && ocrFields.length > 0 && lowConfidenceCount === 0 && (
+        {(pipelineStatus === 'ready' || pipelineStatus === 'in_design') && (
           <Alert
             message="流水线状态正常"
-            description="所有低置信度字段已复核，可以进入方案设计阶段。"
+            description="文档解析已完成，可以进入方案设计阶段。"
             type="success"
             showIcon
             icon={<CheckCircleOutlined />}
+            action={
+              <Button
+                type="primary"
+                icon={<FileTextOutlined />}
+                onClick={() => navigate(`/documents/${documentId}/design`)}
+              >
+                进入方案设计
+              </Button>
+            }
           />
         )}
 

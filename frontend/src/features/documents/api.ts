@@ -1,5 +1,6 @@
 import api from '../../api/axios'
 import {
+  DesignDocument,
   DocumentListItem,
   DocumentStatus,
   OcrField,
@@ -100,6 +101,16 @@ export async function confirmOcrField(
   if (!res.data.success) {
     throw new Error(res.data.error?.message || '确认字段失败')
   }
+  return res.data.data
+}
+
+export async function triggerDesignDocument(documentId: string): Promise<{ documentId: string; designTaskId: string; status: string }> {
+  const res = await api.post(`/documents/${documentId}/design`)
+  return res.data.data
+}
+
+export async function getDesignDocument(documentId: string): Promise<DesignDocument> {
+  const res = await api.get(`/documents/${documentId}/design`)
   return res.data.data
 }
 
