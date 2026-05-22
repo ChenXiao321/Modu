@@ -227,3 +227,15 @@ Claude (bmad-dev-story workflow) + 3 层对抗式代码评审
 - [x] [Review][Patch][D1] 缺少超时补偿机制 → 修复：`get_design_document` 中实现惰性超时检测，超过 10 分钟自动标记 `failed`
 - [x] [Review][Patch][D2] 无 ASIL 时标记为 QM → 修复：`_resolve_asil_level` 返回 `None` 时由调用方设为 `"QM"`；`MockLLMClient` 中 `effective_asil = asil_level or "QM"`
 - [x] [Review][Patch][D3] 允许重新生成但需正确清理旧数据 → 修复：与 P1/P7 合并处理，重新生成时清除旧 sections、asil_level、error_message
+
+#### 待办：第二次代码评审
+
+- [ ] **触发条件**：下次进入本项目会话时，优先启动 Story 2.1 的第二次代码评审。
+- [ ] **评审重点**：
+  - P1/P7/D3（重新生成时的 ID 一致性和数据清理）修复后的边界场景
+  - D1（超时补偿机制）在真实运行时的表现
+  - P10（递归深度保护）的测试覆盖
+  - 第一次评审中 Defer 的 3 项（测试覆盖盲区、NaN/inf 校验、输入框最大长度限制）
+  - 第一次评审中 Dismiss 的 5 项是否有新的触发条件
+- [ ] **评审策略**：建议换用不同 LLM 获取新上下文，运行 `bmad-code-review` skill 发起第二轮 adversarial review
+- [ ] **commit 基线**：`aaf0712`
