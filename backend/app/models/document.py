@@ -22,3 +22,4 @@ class Document(Base, TenantMixin, TimestampMixin):
     parse_status = Column(String(50), nullable=True)
     pipeline_status = Column(String(20), nullable=False, default="ready")
     block_reason = Column(String(255), nullable=True)
+    is_scan_document = Column(String(10), nullable=True)  # 'true' | 'false' | None

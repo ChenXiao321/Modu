@@ -28,6 +28,7 @@ const RequirementViewerPage: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmingFieldId, setConfirmingFieldId] = useState<string | null>(null)
+  const [reviewerName, setReviewerName] = useState<string>('')
 
   useEffect(() => {
     if (!documentId) return
@@ -56,9 +57,13 @@ const RequirementViewerPage: React.FC = () => {
 
   const handleConfirmField = async (fieldId: string) => {
     if (!documentId) return
+    if (!reviewerName.trim()) {
+      setError('请先输入复核人姓名')
+      return
+    }
     setConfirmingFieldId(fieldId)
     try {
-      const result = await confirmOcrField(documentId, fieldId, '工程师')
+      const result = await confirmOcrField(documentId, fieldId, reviewerName.trim())
       setOcrFields((prev) =>
         prev.map((f) =>
           f.fieldId === fieldId
@@ -72,9 +77,7 @@ const RequirementViewerPage: React.FC = () => {
         )
       )
       setPipelineStatus(result.pipelineStatus)
-      if (result.allConfirmed) {
-        setBlockReason(undefined)
-      }
+      setBlockReason(result.blockReason)
     } catch (e) {
       setError(e instanceof Error ? e.message : '确认失败')
     } finally {
@@ -205,6 +208,19 @@ const RequirementViewerPage: React.FC = () => {
               </Button>
             }
           />
+        )}
+
+        {ocrFields.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <span style={{ marginRight: 8 }}>复核人姓名:</span>
+            <input
+              type="text"
+              value={reviewerName}
+              onChange={(e) => setReviewerName(e.target.value)}
+              placeholder="请输入您的姓名"
+              style={{ padding: '4px 8px', borderRadius: 4, border: '1px solid #d9d9d9' }}
+            />
+          </div>
         )}
 
         {pipelineStatus === 'ready' && ocrFields.length > 0 && lowConfidenceCount === 0 && (

@@ -65,7 +65,7 @@ class OcrResultListResponse(BaseModel):
 
 
 class ConfirmFieldRequest(BaseModel):
-    reviewer_name: str
+    reviewer_name: str = Field(..., min_length=1, max_length=100)
 
 
 class ConfirmFieldResponse(BaseModel):
@@ -84,4 +84,6 @@ class DocumentListItem(BaseModel):
     file_size_bytes: int
     upload_status: str
     parse_status: str | None = None
+    pipeline_status: str | None = None
+    block_reason: str | None = None
     created_at: str | None = None

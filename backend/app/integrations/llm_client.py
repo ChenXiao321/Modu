@@ -216,6 +216,7 @@ class MockLLMClient(LLMClient):
             },
         ]
 
-        # Deterministically return a subset; ensure at least some low-confidence fields for testing
-        count = min(len(fields), max(1, text_length % 5))
+        # Return a stable subset for testing: always return fields 1-3 to ensure
+        # both high-confidence and low-confidence fields are present.
+        count = min(len(fields), 3)
         return fields[:count]

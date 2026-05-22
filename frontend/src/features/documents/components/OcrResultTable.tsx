@@ -55,7 +55,11 @@ const OcrResultTable: React.FC<OcrResultTableProps> = ({
       dataIndex: 'confidence',
       key: 'confidence',
       width: 120,
-      sorter: (a: OcrField, b: OcrField) => a.confidence - b.confidence,
+      sorter: (a: OcrField, b: OcrField) => {
+        const av = Number.isFinite(a.confidence) ? a.confidence : 0
+        const bv = Number.isFinite(b.confidence) ? b.confidence : 0
+        return av - bv
+      },
       render: (confidence: number) => {
         let color = 'green'
         if (confidence < 0.95) color = 'red'
@@ -133,6 +137,9 @@ const OcrResultTable: React.FC<OcrResultTableProps> = ({
     return ''
   }
 
+  const rowStyle = { backgroundColor: '#fff2f0' }
+  const rowHoverStyle = { backgroundColor: '#ffe0e0' }
+
   return (
     <div>
       {pipelineBlocked && (
@@ -148,19 +155,14 @@ const OcrResultTable: React.FC<OcrResultTableProps> = ({
       <Table
         columns={columns}
         dataSource={fields}
-        rowKey="id"
+        rowKey="fieldId"
         rowClassName={rowClassName}
+        onRow={(record) => ({
+          style: record.confidence < 0.95 && record.reviewStatus !== 'confirmed' ? rowStyle : {},
+        })}
         pagination={{ pageSize: 10 }}
         locale={{ emptyText: '暂无 OCR 提取结果' }}
       />
-      <style>{`
-        .ocr-low-confidence-row {
-          background-color: #fff2f0 !important;
-        }
-        .ocr-low-confidence-row:hover > td {
-          background-color: #ffe0e0 !important;
-        }
-      `}</style>
     </div>
   )
 }

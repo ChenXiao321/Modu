@@ -1,7 +1,6 @@
 import uuid
 
 from sqlalchemy import Column, DateTime, Float, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
 
 from app.models.base import Base, TenantMixin, TimestampMixin
 

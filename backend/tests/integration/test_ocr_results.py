@@ -162,19 +162,25 @@ class TestOcrResultsEndpoint:
             mock_extract.return_value = "Sample OCR text with voltage 4.5V"
             svc.execute_parse(1, ocr_document.id)
 
-        while True:
+        max_iterations = 20
+        for _ in range(max_iterations):
             res = client.get(f"/api/v1/documents/{ocr_document.id}/ocr-results")
             data = res.json()["data"]
             if data["pipeline_status"] != "blocked":
                 break
-            low_conf = next(
+            pending_low_conf = [
                 f for f in data["fields"]
                 if f["confidence"] < 0.95 and f["review_status"] == "pending"
-            )
+            ]
+            if not pending_low_conf:
+                break
+            low_conf = pending_low_conf[0]
             client.post(
                 f"/api/v1/documents/{ocr_document.id}/ocr-fields/{low_conf['field_id']}/confirm",
                 json={"reviewer_name": "工程师"},
             )
+        else:
+            pytest.fail("Pipeline remained blocked after confirming all low-confidence fields")
 
         final = client.get(f"/api/v1/documents/{ocr_document.id}/ocr-results")
         assert final.json()["data"]["pipeline_status"] == "ready"

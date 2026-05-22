@@ -249,3 +249,47 @@ Claude (bmad-dev-story workflow)
 - [Source: backend/app/integrations/llm_client.py] — Story 1.2/1.3 LLMClient 接口参考
 - [Source: backend/app/services/document_parse_service.py] — Story 1.2/1.3 解析服务参考
 - [Source: frontend/src/features/documents/pages/RequirementViewerPage.tsx] — Story 1.3 需求查看页面参考
+
+### Review Findings
+
+#### Patch
+
+- [x] [Review][Patch] `_persist_ocr_results` 未按 spec 强制字段编号规则 `OCR-FIELD-{序号:04d}`，改为服务层强制生成 [document_parse_service.py:937]（决策：1A）
+- [x] [Review][Patch] `_is_ocr_document` 对 `application/pdf` 判定过于宽泛，改为界面上让用户手动标记"是否为扫描件" [document_parse_service.py:927]（决策：2C）
+
+- [x] [Review][Patch] `execute_parse` 中 OCR 字段提取异常被静默吞掉，文档仍被标记为 `completed` [document_parse_service.py:897]
+- [x] [Review][Patch] `_persist_ocr_results` 循环内逐条 `commit`，无事务包裹，部分失败产生脏数据 [document_parse_service.py:943]
+- [x] [Review][Patch] `confirm_low_confidence_field` 存在 TOCTOU 竞态且未校验流水线 `blocked` 状态 [document_parse_service.py:1036]
+- [x] [Review][Patch] `get_ocr_results` 在文档重新解析（`running`）或解析失败（`failed`）时返回数据与 `pipeline_status` 可能不一致 [document_parse_service.py:1003]
+- [x] [Review][Patch] `DocumentListItem` schema 未同步扩展 `pipeline_status`/`block_reason` [schemas/requirements.py:844]
+- [x] [Review][Patch] 前端 `handleConfirmField` 中复核人硬编码为 `'工程师'` [RequirementViewerPage.tsx:1693]
+- [x] [Review][Patch] 前端 `getOcrResults`/`confirmOcrField` API 函数缺少 `success` 校验 [api.ts:1431]
+- [x] [Review][Patch] `OcrResultTable` 使用全局 `<style>` 标签注入 CSS，存在样式污染风险 [OcrResultTable.tsx:1587]
+- [x] [Review][Patch] `OcrResultTable` 的 `rowKey` 依赖后端 `id`，`confirmingFieldId` 状态管理不够健壮 [OcrResultTable.tsx:151,1566]
+- [x] [Review][Patch] `test_document_parse_service_ocr.py` 为空文件，缺少 `DocumentParseService` OCR 逻辑的单元测试 [test_document_parse_service_ocr.py]
+- [x] [Review][Patch] `test_pipeline_unblocked_after_all_confirmed` 中 `while True` 在 Mock 不返回低置信度字段时可能无限循环 [test_ocr_results.py:159]
+- [x] [Review][Patch] `MockLLMClient.extract_ocr_fields` 使用 `text_length % 5` 决定返回字段数，测试不稳定 [llm_client.py:571]
+- [x] [Review][Patch] `update_review_status` 在方法内部局部导入 `datetime`，且无乐观锁/原子更新 [ocr_result_repository.py:721]
+- [x] [Review][Patch] `delete_by_document` 使用 `synchronize_session=False`，高并发下可能残留旧数据 [ocr_result_repository.py:76]
+- [x] [Review][Patch] `_update_pipeline_block_status` 对已进入 `in_design` 的 OCR 文档重新解析时可能错误重置状态 [document_parse_service.py:322]
+- [x] [Review][Patch] `ConfirmFieldRequest` 的 `reviewer_name` 无长度和空值校验 [schemas/requirements.py:67]
+- [x] [Review][Patch] `get_low_confidence_count` 的 `threshold` 参数未校验 `NaN` 或负值 [ocr_result_repository.py:30]
+- [x] [Review][Patch] `OcrExtractionResult` 导入未使用的 `UUID` 类型 [ocr_extraction_result.py:1]
+- [x] [Review][Patch] `RequirementViewerPage` 中 `setBlockReason(undefined)` 未使用后端返回的 `blockReason` [RequirementViewerPage.tsx:1707]
+- [x] [Review][Patch] `OcrResultTable` 的 `confidence` sorter 在 `NaN` 时行为未定义 [OcrResultTable.tsx:58]
+- [x] [Review][Patch] `PipelineNotBlockedError` 已定义但 `confirm_low_confidence_field` 中未使用，未阻塞流水线时仍可确认 [exceptions.py:518]
+
+#### Verification Review Findings (2026-05-22)
+
+- [x] [Review][Patch] `_persist_ocr_results` 中 `extracted_text` 无长度上限，已添加 `_MAX_EXTRACTED_TEXT_LEN = 10000` [document_parse_service.py:303]
+- [x] [Review][Patch] `get_ocr_results` running 状态返回不一致的 `pipeline_status`，已改为单独处理返回 `"running"` [document_parse_service.py:366]
+- [x] [Review][Defer] `update_review_status_atomic` 会话同步隐患 — MVP 阶段当前调用模式安全，后续重构时需注意 [ocr_result_repository.py:147]
+- [x] [Review][Defer] `_persist_ocr_results` 超大事务风险 — MVP 单文档 ≤ 50 页，暂不构成瓶颈 [document_parse_service.py:291]
+- [x] [Review][Defer] `_update_pipeline_block_status` 终态硬编码（仅 `in_design`）— 未来新增终态时需扩展 [document_parse_service.py:336]
+- [x] [Review][Patch] `delete_by_document` + `_persist_ocr_results` 非原子性 — 已修复：将删除逻辑移入 `_persist_ocr_results` 内部，delete + insert 在同一事务中提交 [document_parse_service.py:291]
+- [x] [Review][Defer] `MockLLMClient` 测试覆盖盲区 — 固定返回 3 个字段时若全部高置信度，核心解阻塞路径未被覆盖 [llm_client.py:571]
+- [x] [Review][Defer] `get_low_confidence_count` NaN/inf 校验可进一步完善 [ocr_result_repository.py:106]
+- [x] [Review][Defer] reviewerName 输入框无前端最大长度限制 [RequirementViewerPage.tsx:1798]
+- [x] [Review][Defer] `OcrResultTable` `onRow` style 对象引用可能导致重渲染 [OcrResultTable.tsx:166]
+- [x] [Review][Defer] 测试中断言过于宽泛（`pytest.raises(Exception)`）— 应使用具体异常类型 [test_document_parse_service_ocr.py:568]
+- [x] [Review][Defer] `source_page` 类型错误静默吞掉，建议添加日志警告 [document_parse_service.py:315]

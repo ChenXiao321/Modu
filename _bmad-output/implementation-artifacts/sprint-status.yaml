@@ -1,5 +1,5 @@
 # generated: 2026-05-20
-# last_updated: 2026-05-21
+# last_updated: 2026-05-22
 # project: Modu
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev 将 Story 移至 review，然后运行 code-review（建议用不同的 LLM 获取新上下文）
 
 generated: 2026-05-20
-last_updated: 2026-05-21
+last_updated: 2026-05-22
 project: Modu
 project_key: NOKEY
 tracking_system: file-system

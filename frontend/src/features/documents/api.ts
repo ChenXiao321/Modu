@@ -79,6 +79,9 @@ export async function getSafetyParameters(documentId: string): Promise<SafetyPar
 
 export async function getOcrResults(documentId: string): Promise<{ pipelineStatus: string; blockReason?: string; fields: OcrField[] }> {
   const res = await api.get(`/documents/${documentId}/ocr-results`)
+  if (!res.data.success) {
+    throw new Error(res.data.error?.message || '获取 OCR 结果失败')
+  }
   return {
     pipelineStatus: res.data.data.pipeline_status,
     blockReason: res.data.data.block_reason,
@@ -90,10 +93,13 @@ export async function confirmOcrField(
   documentId: string,
   fieldId: string,
   reviewerName: string
-): Promise<{ fieldId: string; reviewStatus: string; reviewedBy: string; reviewedAt: string; pipelineStatus: string; allConfirmed: boolean }> {
+): Promise<{ fieldId: string; reviewStatus: string; reviewedBy: string; reviewedAt: string; pipelineStatus: string; allConfirmed: boolean; blockReason?: string }> {
   const res = await api.post(`/documents/${documentId}/ocr-fields/${fieldId}/confirm`, {
     reviewer_name: reviewerName,
   })
+  if (!res.data.success) {
+    throw new Error(res.data.error?.message || '确认字段失败')
+  }
   return res.data.data
 }
 
