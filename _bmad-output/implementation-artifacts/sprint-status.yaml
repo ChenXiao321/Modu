@@ -1,5 +1,5 @@
 # generated: 2026-05-20
-# last_updated: 2026-05-22
+# last_updated: 2026-05-27
 # project: Modu
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev 将 Story 移至 review，然后运行 code-review（建议用不同的 LLM 获取新上下文）
 
 generated: 2026-05-20
-last_updated: 2026-05-22
+last_updated: 2026-05-27
 project: Modu
 project_key: NOKEY
 tracking_system: file-system
@@ -53,7 +53,7 @@ development_status:
   # Epic 2: 方案设计与审查协作
   epic-2: in-progress
   2-1-design-document-auto-generation: done
-  2-2-design-document-split-screen-review-and-online-correction: backlog
+  2-2-design-document-split-screen-review-and-online-correction: done
   2-3-design-verification-gate-and-review-record-locking: backlog
   epic-2-retrospective: optional
 

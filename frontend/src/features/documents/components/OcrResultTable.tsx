@@ -138,7 +138,6 @@ const OcrResultTable: React.FC<OcrResultTableProps> = ({
   }
 
   const rowStyle = { backgroundColor: '#fff2f0' }
-  const rowHoverStyle = { backgroundColor: '#ffe0e0' }
 
   return (
     <div>

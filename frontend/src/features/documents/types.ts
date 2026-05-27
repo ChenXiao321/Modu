@@ -85,6 +85,16 @@ export interface DesignDocument {
   errorMessage?: string
 }
 
+export type PipelineStatus =
+  | 'ready'
+  | 'blocked'
+  | 'in_design'
+  | 'design_reviewed'
+  | 'pending'
+  | 'failed'
+  | 'completed'
+  | 'generating'
+
 export interface DocumentListItem {
   documentId: string
   originalFilename: string
@@ -92,7 +102,40 @@ export interface DocumentListItem {
   fileSizeBytes: number
   uploadStatus: string
   parseStatus?: string
-  pipelineStatus?: string
+  pipelineStatus?: PipelineStatus
   blockReason?: string
   createdAt?: string
+}
+
+export interface DesignRevision {
+  id: string
+  sectionKey: string
+  originalContent: string
+  revisedContent: string
+  author: string
+  createdAt: string
+}
+
+export interface DesignRevisionWithDiff extends DesignRevision {
+  diff: string
+}
+
+export interface ReviewComment {
+  id: string
+  sectionKey: string
+  author: string
+  commentText: string
+  createdAt: string
+  resolvedAt?: string
+  resolvedBy?: string
+}
+
+export interface DesignReviewContext {
+  documentId: string
+  designDocument: DesignDocument
+  requirements: RequirementTreeNode[]
+  safetyParameters: SafetyParameter[]
+  reviewComments: Record<string, ReviewComment[]>
+  pendingCommentsCount: number
+  pipelineStatus: PipelineStatus
 }

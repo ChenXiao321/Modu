@@ -22,6 +22,7 @@ import {
   BugOutlined,
   SafetyOutlined,
   ExperimentOutlined,
+  EyeOutlined,
 } from '@ant-design/icons'
 import { getDesignDocument, triggerDesignDocument } from '../api'
 import type { DesignDocument, DesignSection } from '../types'
@@ -156,7 +157,7 @@ const DesignDocumentPage: React.FC = () => {
         <div>
           <Button
             icon={<ArrowLeftOutlined />}
-            onClick={() => navigate(`/documents/${documentId}/requirements`)}
+            onClick={() => documentId && navigate(`/documents/${documentId}/requirements`)}
             style={{ marginBottom: 16 }}
           >
             返回需求查看
@@ -189,13 +190,24 @@ const DesignDocumentPage: React.FC = () => {
             </Button>
           )}
           {(designDoc?.status === 'completed' || designDoc?.status === 'failed') && (
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={handleGenerate}
-              loading={generating}
-            >
-              重新生成
-            </Button>
+            <Space>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={handleGenerate}
+                loading={generating}
+              >
+                重新生成
+              </Button>
+              {designDoc?.status === 'completed' && (
+                <Button
+                  type="primary"
+                  icon={<EyeOutlined />}
+                  onClick={() => navigate(`/documents/${documentId}/design-review`)}
+                >
+                  进入设计审查
+                </Button>
+              )}
+            </Space>
           )}
         </Card>
 

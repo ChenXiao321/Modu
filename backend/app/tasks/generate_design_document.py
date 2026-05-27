@@ -36,14 +36,15 @@ def _run_generate(tenant_id: int, document_id: str) -> None:
 
         service = DesignDocumentService(db)
         service.execute_generate(tenant_id, document_id)
-    except Exception:
+    except Exception as exc:
         logger.exception("Background design generation crashed for document %s", document_id)
+        error_msg = str(exc) if str(exc) else "后台任务执行异常"
         try:
             design_repo.update_status(
                 document_id,
                 tenant_id,
                 "failed",
-                error_message="后台任务执行异常",
+                error_message=error_msg,
             )
         except Exception:
             logger.exception(

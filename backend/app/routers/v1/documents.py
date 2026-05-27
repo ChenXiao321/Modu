@@ -6,6 +6,12 @@ from sqlalchemy.orm import Session
 from app.dependencies import CurrentTenant
 from app.exceptions import DocumentNotFoundError, DocumentNotReadyError, ModuException
 from app.models.base import get_db
+from app.schemas.design_review import (
+    ResolveCommentRequest,
+    ReviewCommentRequest,
+    RollbackRevisionRequest,
+    SaveRevisionRequest,
+)
 from app.schemas.documents import (
     DocumentStatusResponse,
     StandardResponse,
@@ -16,6 +22,7 @@ from app.schemas.documents import (
 )
 from app.schemas.requirements import ConfirmFieldRequest
 from app.services.design_document_service import DesignDocumentService
+from app.services.design_review_service import DesignReviewService
 from app.services.document_parse_service import DocumentParseService
 from app.services.document_service import DocumentService
 from app.tasks.generate_design_document import schedule_generate_design_document
@@ -198,3 +205,107 @@ def list_documents(
             }
         )
     return _wrap({"items": items, "total": len(items)})
+
+
+# ---------------------------------------------------------------------------
+# Design Review endpoints (Story 2.2)
+# ---------------------------------------------------------------------------
+
+@router.get("/{document_id}/design-review", response_model=StandardResponse)
+def get_design_review(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.get_review_context(tenant_id, document_id)
+    return _wrap(result)
+
+
+@router.post("/{document_id}/design-revisions", response_model=StandardResponse)
+def save_design_revision(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    req: SaveRevisionRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.save_revision(
+        tenant_id, document_id, req.section_key, req.revised_content, req.author
+    )
+    return _wrap(result)
+
+
+@router.get("/{document_id}/design-revisions", response_model=StandardResponse)
+def get_design_revisions(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    section_key: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.get_revision_history(tenant_id, document_id, section_key)
+    return _wrap(result)
+
+
+@router.post("/{document_id}/review-comments", response_model=StandardResponse)
+def add_review_comment(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    req: ReviewCommentRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.add_review_comment(
+        tenant_id, document_id, req.section_key, req.comment_text, req.author
+    )
+    return _wrap(result)
+
+
+@router.get("/{document_id}/review-comments", response_model=StandardResponse)
+def get_review_comments(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    section_key: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.get_review_comments(tenant_id, document_id, section_key)
+    return _wrap(result)
+
+
+@router.patch("/{document_id}/review-comments/{comment_id}/resolve", response_model=StandardResponse)
+def resolve_review_comment(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    comment_id: str,
+    req: ResolveCommentRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.resolve_review_comment(tenant_id, document_id, comment_id, req.resolved_by)
+    return _wrap(result)
+
+
+@router.post("/{document_id}/design-review/submit", response_model=StandardResponse)
+def submit_design_review(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.submit_design_review(tenant_id, document_id)
+    return _wrap(result)
+
+
+@router.post("/{document_id}/design-revisions/{revision_id}/rollback", response_model=StandardResponse)
+def rollback_to_revision(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    revision_id: str,
+    req: RollbackRevisionRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DesignReviewService(db)
+    result = svc.rollback_to_revision(tenant_id, document_id, revision_id, req.author)
+    return _wrap(result)

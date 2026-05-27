@@ -1,12 +1,16 @@
 import api from '../../api/axios'
 import {
   DesignDocument,
+  DesignReviewContext,
+  DesignRevision,
+  DesignRevisionWithDiff,
   DocumentListItem,
   DocumentStatus,
   OcrField,
   ParseStatusResponse,
   ParseTriggerResponse,
   RequirementTreeNode,
+  ReviewComment,
   SafetyParameter,
   UploadCompleteResponse,
   UploadInitResponse,
@@ -117,4 +121,170 @@ export async function getDesignDocument(documentId: string): Promise<DesignDocum
 export async function listDocuments(): Promise<DocumentListItem[]> {
   const res = await api.get('/documents')
   return res.data.data.items
+}
+
+// Design Review APIs (Story 2.2)
+
+function checkSuccess(res: any): void {
+  if (!res.data || !res.data.success) {
+    throw new Error(res.data?.error?.message || '请求失败')
+  }
+}
+
+function mapReviewComment(c: any): ReviewComment {
+  return {
+    id: c.id,
+    sectionKey: c.section_key,
+    author: c.author,
+    commentText: c.comment_text,
+    createdAt: c.created_at,
+    resolvedAt: c.resolved_at,
+    resolvedBy: c.resolved_by,
+  }
+}
+
+function mapDesignRevision(r: any): DesignRevision {
+  return {
+    id: r.id ?? r.revision_id,
+    sectionKey: r.section_key,
+    originalContent: r.original_content,
+    revisedContent: r.revised_content,
+    author: r.author,
+    createdAt: r.created_at,
+  }
+}
+
+function mapDesignRevisionWithDiff(r: any): DesignRevisionWithDiff {
+  return {
+    ...mapDesignRevision(r),
+    diff: r.diff,
+  }
+}
+
+export async function getDesignReview(documentId: string): Promise<DesignReviewContext> {
+  const res = await api.get(`/documents/${documentId}/design-review`)
+  checkSuccess(res)
+  const data = res.data.data
+  return {
+    documentId: data.document_id,
+    designDocument: {
+      documentId: data.design_document?.document_id ?? documentId,
+      status: data.design_document?.status,
+      asilLevel: data.design_document?.asil_level,
+      sections: data.design_document?.sections
+        ? Object.fromEntries(
+            Object.entries(data.design_document.sections).map(([k, v]: [string, any]) => [
+              k,
+              { content: v.content, polarionTraceId: v.polarion_trace_id },
+            ])
+          )
+        : undefined,
+      errorMessage: data.design_document?.error_message,
+    },
+    requirements: data.requirements,
+    safetyParameters: data.safety_parameters,
+    reviewComments: Object.fromEntries(
+      Object.entries(data.review_comments || {}).map(([key, comments]: [string, any]) => [
+        key,
+        comments.map(mapReviewComment),
+      ])
+    ),
+    pendingCommentsCount: data.pending_comments_count,
+    pipelineStatus: data.pipeline_status,
+  }
+}
+
+export async function saveDesignRevision(
+  documentId: string,
+  sectionKey: string,
+  revisedContent: string,
+  author: string
+): Promise<DesignRevision> {
+  const res = await api.post(`/documents/${documentId}/design-revisions`, {
+    section_key: sectionKey,
+    revised_content: revisedContent,
+    author,
+  })
+  checkSuccess(res)
+  return mapDesignRevision(res.data.data)
+}
+
+export async function getDesignRevisions(
+  documentId: string,
+  sectionKey: string
+): Promise<{ sectionKey: string; revisions: DesignRevisionWithDiff[] }> {
+  const res = await api.get(`/documents/${documentId}/design-revisions`, {
+    params: { section_key: sectionKey },
+  })
+  checkSuccess(res)
+  const data = res.data.data
+  return {
+    sectionKey: data.section_key,
+    revisions: data.revisions.map(mapDesignRevisionWithDiff),
+  }
+}
+
+export async function addReviewComment(
+  documentId: string,
+  sectionKey: string,
+  commentText: string,
+  author: string
+): Promise<ReviewComment> {
+  const res = await api.post(`/documents/${documentId}/review-comments`, {
+    section_key: sectionKey,
+    comment_text: commentText,
+    author,
+  })
+  checkSuccess(res)
+  return mapReviewComment(res.data.data)
+}
+
+export async function getReviewComments(
+  documentId: string,
+  sectionKey: string
+): Promise<{ sectionKey: string; comments: ReviewComment[] }> {
+  const res = await api.get(`/documents/${documentId}/review-comments`, {
+    params: { section_key: sectionKey },
+  })
+  checkSuccess(res)
+  const data = res.data.data
+  return {
+    sectionKey: data.section_key,
+    comments: data.comments.map(mapReviewComment),
+  }
+}
+
+export async function resolveReviewComment(
+  documentId: string,
+  commentId: string,
+  resolvedBy: string
+): Promise<ReviewComment> {
+  const res = await api.patch(`/documents/${documentId}/review-comments/${commentId}/resolve`, {
+    resolved_by: resolvedBy,
+  })
+  checkSuccess(res)
+  return mapReviewComment(res.data.data)
+}
+
+export async function submitDesignReview(documentId: string): Promise<{ documentId: string; pipelineStatus: string; submittedAt: string }> {
+  const res = await api.post(`/documents/${documentId}/design-review/submit`)
+  checkSuccess(res)
+  const data = res.data.data
+  return {
+    documentId: data.document_id,
+    pipelineStatus: data.pipeline_status,
+    submittedAt: data.submitted_at,
+  }
+}
+
+export async function rollbackToRevision(
+  documentId: string,
+  revisionId: string,
+  author: string
+): Promise<DesignRevision> {
+  const res = await api.post(`/documents/${documentId}/design-revisions/${revisionId}/rollback`, {
+    author,
+  })
+  checkSuccess(res)
+  return mapDesignRevision(res.data.data)
 }

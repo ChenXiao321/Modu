@@ -1,6 +1,6 @@
 # Story 2.1: 设计文档自动生成
 
-Status: done
+Status: in-progress
 
 ## Story
 
@@ -238,4 +238,41 @@ Claude (bmad-dev-story workflow) + 3 层对抗式代码评审
   - 第一次评审中 Defer 的 3 项（测试覆盖盲区、NaN/inf 校验、输入框最大长度限制）
   - 第一次评审中 Dismiss 的 5 项是否有新的触发条件
 - [ ] **评审策略**：建议换用不同 LLM 获取新上下文，运行 `bmad-code-review` skill 发起第二轮 adversarial review
-- [ ] **commit 基线**：`aaf0712`
+- [x] **commit 基线**：`aaf0712`
+
+#### 第二次代码评审（2026-05-25）
+
+- **评审日期**: 2026-05-25
+- **评审轮次**: 2 轮（3 层并行评审 + 联合裁决）
+- **评审策略**: Blind Hunter + Edge Case Hunter + Acceptance Auditor
+- **发现问题总数**: 33 项（patch 14 + defer 6 + dismiss 3）
+- **评审重点覆盖**: P1/P7/D3 边界场景、D1 真实表现、P10 测试覆盖、Defer/Dismiss 复查
+
+**Patch 已修复清单（2026-05-25）：**
+
+- [x] [Review][Patch] TOCTOU 竞态：`trigger_generate` 状态检查与后台任务调度非原子 → 修复：`existing` 查询增加 `with_for_update()` 行级锁 [backend/app/services/design_document_service.py:49]
+- [x] [Review][Patch] 生产服务硬编码 `MockLLMClient`，应改为依赖注入 → 修复：`__init__` 增加 `llm_client: LLMClient | None = None` 参数，默认回退 `MockLLMClient()` [backend/app/services/design_document_service.py:28-34]
+- [x] [Review][Patch] GET 端点惰性超时检测存在写竞态且返回不一致数据 → 修复：`get_design_document` 不再修改 DB，仅返回计算出的超时状态 [backend/app/services/design_document_service.py:187-201]
+- [x] [Review][Patch] `except Exception` 过宽且 `_run_generate` 丢失原始错误信息 → 修复：`_run_generate` 捕获 `Exception as exc` 并将 `str(exc)` 写入 DB；`execute_generate` 失败时恢复 `pipeline_status` [backend/app/tasks/generate_design_document.py:39-48, backend/app/services/design_document_service.py:162-179]
+- [x] [Review][Patch] `sections` 内部结构未校验（违反 AC3） → 修复：`execute_generate` 增加对每个 section 的 `content` (str) 和 `polarion_trace_id` (str) 校验 [backend/app/services/design_document_service.py:133-152]
+- [x] [Review][Patch] `_build_requirements_list` 深度超限静默丢弃深层子树 → 修复：深度超限时抛出 `ValueError` 而非返回空列表 [backend/app/services/design_document_service.py:213-217]
+- [x] [Review][Patch] 缺少集成测试（Subtask 5.3 未完成） → 修复：新增 `test_design_document_router.py`，覆盖 POST/GET 端点 9 个场景 [backend/tests/integration/test_design_document_router.py]
+- [x] [Review][Patch] `execute_generate` 失败时不恢复 `Document.pipeline_status` → 修复：except 块中若 `pipeline_status == "in_design"` 则回退到 `ready` [backend/app/services/design_document_service.py:170-179]
+
+**Patch 待修复清单（保留为 action items）：**
+
+- [ ] [Review][Patch] `trigger_generate` 允许 `pipeline_status == "in_design"` 时重新触发，导致数据丢失 [backend/app/services/design_document_service.py:358-397]
+- [ ] [Review][Patch] ASIL 值处理不健壮（非字符串类型可能崩溃、非标准值静默丢弃） [backend/app/services/design_document_service.py:552-568]
+- [ ] [Review][Patch] `_run_generate` 不重新验证父文档存在性，删除后任务卡死 [backend/app/tasks/generate_design_document.py:593-627]
+- [ ] [Review][Patch] 前端轮询存在 cleanup race，status 快速变化时可能产生重叠 timeout [frontend/src/features/documents/pages/DesignDocumentPage.tsx:1255-1279]
+- [ ] [Review][Patch] `safety_params_list` 可能包含 `None` 值直接传入 LLM [backend/app/services/design_document_service.py:432-442]
+- [ ] [Review][Patch] `DesignDocument` 模型缺少 `document_id` 唯一约束 [backend/app/models/design_document.py:215]
+
+**Defer 清单：**
+
+- [x] [Review][Defer] `DesignDocumentRepository.create` 无显式 rollback 处理 [backend/app/repositories/design_document_repository.py:231-235] — deferred, pre-existing SQLAlchemy session 管理模式
+- [x] [Review][Defer] 前端 `DesignDocument.status` 类型为 `string` 而非字面量联合 [frontend/src/features/documents/types.ts:1458-1469] — deferred, TypeScript 增强
+- [x] [Review][Defer] `document_id` URL 参数无 UUID 格式校验 [backend/app/routers/v1/documents.py:290-311] — deferred, 项目范围路由校验模式
+- [x] [Review][Defer] `MockLLMClient` trace ID 基于 `len(filename) % 1000` 易碰撞 [backend/app/integrations/llm_client.py:74] — deferred, Mock 已知限制
+- [x] [Review][Defer] `_build_requirements_list` 递归遍历 `r.children` 存在跨租户泄漏假设 [backend/app/services/design_document_service.py:428,541] — deferred, 无实证
+- [x] [Review][Defer] `TimestampMixin` 的 `onupdate` 行为未在 diff 中验证 [backend/app/models/design_document.py] — deferred, pre-existing

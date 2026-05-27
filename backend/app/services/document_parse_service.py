@@ -416,6 +416,12 @@ class DocumentParseService:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
         if doc is None:
             raise DocumentNotFoundError(document_id)
+
+        # If field is already confirmed, report that regardless of pipeline state
+        field = self.ocr_repo.get_by_field_id(document_id, tenant_id, field_id)
+        if field is not None and field.review_status == "confirmed":
+            raise FieldAlreadyConfirmedError(field_id)
+
         if doc.pipeline_status != "blocked":
             raise PipelineNotBlockedError(document_id)
 
@@ -424,11 +430,8 @@ class DocumentParseService:
             document_id, tenant_id, field_id, reviewer
         )
         if updated_count == 0:
-            # Either field not found or already confirmed by another request
-            field = self.ocr_repo.get_by_field_id(document_id, tenant_id, field_id)
-            if field is None:
-                raise FieldNotFoundError(field_id)
-            raise FieldAlreadyConfirmedError(field_id)
+            # Field not found or race lost
+            raise FieldNotFoundError(field_id)
 
         # Recalculate pipeline status after confirmation
         self._update_pipeline_block_status(tenant_id, document_id)

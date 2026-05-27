@@ -108,6 +108,78 @@ class PipelineBlockedError(ModuException):
         )
 
 
+class DesignDocumentNotFoundError(ModuException):
+    def __init__(self, document_id: str) -> None:
+        super().__init__(
+            error_code="DESIGN_DOCUMENT_NOT_FOUND",
+            message=f"设计文档不存在: {document_id}",
+            detail={"document_id": document_id},
+        )
+
+
+class DesignDocumentNotReadyError(ModuException):
+    def __init__(self, document_id: str, reason: str) -> None:
+        super().__init__(
+            error_code="DESIGN_DOCUMENT_NOT_READY",
+            message=f"设计文档尚未就绪: {reason}",
+            detail={"document_id": document_id, "reason": reason},
+        )
+
+
+class InvalidSectionKeyError(ModuException):
+    def __init__(self, section_key: str) -> None:
+        super().__init__(
+            error_code="INVALID_SECTION_KEY",
+            message=f"无效的章节 key: {section_key}",
+            detail={"section_key": section_key},
+        )
+
+
+class RevisionNotFoundError(ModuException):
+    def __init__(self, revision_id: str) -> None:
+        super().__init__(
+            error_code="REVISION_NOT_FOUND",
+            message=f"修订记录不存在: {revision_id}",
+            detail={"revision_id": revision_id},
+        )
+
+
+class CommentNotFoundError(ModuException):
+    def __init__(self, comment_id: str) -> None:
+        super().__init__(
+            error_code="COMMENT_NOT_FOUND",
+            message=f"评审意见不存在: {comment_id}",
+            detail={"comment_id": comment_id},
+        )
+
+
+class CommentAlreadyResolvedError(ModuException):
+    def __init__(self, comment_id: str) -> None:
+        super().__init__(
+            error_code="COMMENT_ALREADY_RESOLVED",
+            message=f"评审意见已被解决: {comment_id}",
+            detail={"comment_id": comment_id},
+        )
+
+
+class PendingCommentsExistError(ModuException):
+    def __init__(self, document_id: str, count: int) -> None:
+        super().__init__(
+            error_code="PENDING_COMMENTS_EXIST",
+            message=f"存在 {count} 条未解决的评审意见，无法提交审查",
+            detail={"document_id": document_id, "pending_count": count},
+        )
+
+
+class PipelineStatusInvalidError(ModuException):
+    def __init__(self, document_id: str, current_status: str, expected_status: str) -> None:
+        super().__init__(
+            error_code="PIPELINE_STATUS_INVALID",
+            message=f"当前流水线状态 '{current_status}' 不允许执行此操作，期望: {expected_status}",
+            detail={"document_id": document_id, "current_status": current_status, "expected_status": expected_status},
+        )
+
+
 _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FILE_TOO_LARGE": 413,
     "UNSUPPORTED_FILE_TYPE": 415,
@@ -120,6 +192,14 @@ _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FIELD_ALREADY_CONFIRMED": 409,
     "PIPELINE_NOT_BLOCKED": 409,
     "PIPELINE_BLOCKED": 409,
+    "DESIGN_DOCUMENT_NOT_FOUND": 404,
+    "DESIGN_DOCUMENT_NOT_READY": 409,
+    "INVALID_SECTION_KEY": 400,
+    "REVISION_NOT_FOUND": 404,
+    "COMMENT_NOT_FOUND": 404,
+    "PENDING_COMMENTS_EXIST": 409,
+    "PIPELINE_STATUS_INVALID": 409,
+    "COMMENT_ALREADY_RESOLVED": 409,
 }
 
 

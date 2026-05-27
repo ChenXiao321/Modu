@@ -7,8 +7,10 @@ from app.exceptions import (
 )
 from app.models.base import Base, engine
 from app.models.design_document import DesignDocument  # noqa: F401
+from app.models.design_revision import DesignRevision  # noqa: F401
 from app.models.document import Document  # noqa: F401
 from app.models.parsed_requirement import ParsedRequirement  # noqa: F401
+from app.models.review_comment import ReviewComment  # noqa: F401
 from app.models.safety_critical_parameter import SafetyCriticalParameter  # noqa: F401
 from app.routers.v1 import documents
 

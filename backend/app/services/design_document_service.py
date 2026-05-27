@@ -25,13 +25,13 @@ _TIMEOUT_MINUTES = 10
 
 
 class DesignDocumentService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, llm_client: LLMClient | None = None) -> None:
         self.db = db
         self.doc_repo = DocumentRepository(db)
         self.design_repo = DesignDocumentRepository(db)
         self.req_repo = RequirementRepository(db)
         self.safety_repo = SafetyParameterRepository(db)
-        self.llm_client: LLMClient = MockLLMClient()
+        self.llm_client: LLMClient = llm_client or MockLLMClient()
 
     def trigger_generate(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
@@ -46,7 +46,15 @@ class DesignDocumentService:
                 document_id, doc.block_reason or "流水线存在阻塞项未解除"
             )
 
-        existing = self.design_repo.get_by_document_id(document_id, tenant_id)
+        existing = (
+            self.db.query(DesignDocument)
+            .filter(
+                DesignDocument.document_id == document_id,
+                DesignDocument.tenant_id == tenant_id,
+            )
+            .with_for_update()
+            .first()
+        )
         if existing is not None and existing.status == "running":
             raise DocumentNotReadyError(document_id, "设计文档生成任务已在进行中")
 
@@ -140,9 +148,18 @@ class DesignDocumentService:
                 "error_handling",
                 "test_strategy",
             }
+            if not isinstance(sections, dict):
+                raise ValueError(f"LLM 返回的 sections 必须为字典，实际类型: {type(sections).__name__}")
             missing = _REQUIRED_SECTIONS - set(sections.keys())
             if missing:
                 raise ValueError(f"设计文档缺少章节: {', '.join(missing)}")
+            for key, section in sections.items():
+                if not isinstance(section, dict):
+                    raise ValueError(f"章节 '{key}' 格式错误: 必须为字典，实际类型: {type(section).__name__}")
+                if "content" not in section or not isinstance(section["content"], str):
+                    raise ValueError(f"章节 '{key}' 缺少 content 字段或类型错误")
+                if "polarion_trace_id" not in section or not isinstance(section["polarion_trace_id"], str):
+                    raise ValueError(f"章节 '{key}' 缺少 polarion_trace_id 字段或类型错误")
 
             self.design_repo.update_status(
                 document_id,
@@ -168,6 +185,13 @@ class DesignDocumentService:
                 "failed",
                 error_message=error_msg,
             )
+            # Rollback pipeline status if it was promoted to in_design during a re-trigger
+            doc = self.doc_repo.get_by_id(document_id, tenant_id)
+            if doc is not None and doc.pipeline_status == "in_design":
+                doc.pipeline_status = "ready"
+                doc.block_reason = None
+                self.db.commit()
+                self.db.refresh(doc)
 
     def get_design_document(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
@@ -184,37 +208,32 @@ class DesignDocumentService:
                 "error_message": None,
             }
 
-        # Lazy timeout check: auto-fail stuck running tasks
-        if design.status == "running":
+        # Lazy timeout check: report stuck running tasks without mutating DB in a GET path
+        reported_status = design.status
+        reported_error = design.error_message
+        if reported_status == "running":
             last_update = design.updated_at or design.created_at
             if last_update and (
                 datetime.now(timezone.utc) - last_update
             ).total_seconds() > _TIMEOUT_MINUTES * 60:
-                self.design_repo.update_status(
-                    document_id,
-                    tenant_id,
-                    "failed",
-                    error_message="设计文档生成超时（超过10分钟）",
-                )
-                design.status = "failed"
-                design.error_message = "设计文档生成超时（超过10分钟）"
+                reported_status = "failed"
+                reported_error = "设计文档生成超时（超过10分钟）"
 
         return {
             "document_id": document_id,
-            "status": design.status,
+            "status": reported_status,
             "asil_level": design.asil_level,
             "sections": design.sections,
-            "error_message": design.error_message,
+            "error_message": reported_error,
         }
 
     def _build_requirements_list(
         self, roots: List, _depth: int = 0
     ) -> list[dict]:
         if _depth > _MAX_TREE_DEPTH:
-            logger.warning(
-                "Requirement tree depth exceeds max limit %d", _MAX_TREE_DEPTH
+            raise ValueError(
+                f"Requirement tree depth exceeds max limit {_MAX_TREE_DEPTH}"
             )
-            return []
         result = []
         for r in roots:
             node = {

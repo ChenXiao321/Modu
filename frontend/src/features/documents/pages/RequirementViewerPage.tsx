@@ -9,6 +9,7 @@ import {
   ExclamationCircleOutlined,
   CheckCircleOutlined,
   FileTextOutlined,
+  EyeOutlined,
 } from '@ant-design/icons'
 import { getRequirements, getSafetyParameters, getOcrResults, confirmOcrField } from '../api'
 import RequirementTree from '../components/RequirementTree'
@@ -224,7 +225,7 @@ const RequirementViewerPage: React.FC = () => {
           </div>
         )}
 
-        {(pipelineStatus === 'ready' || pipelineStatus === 'in_design') && (
+        {(pipelineStatus === 'ready' || pipelineStatus === 'in_design' || pipelineStatus === 'design_reviewed') && (
           <Alert
             message="流水线状态正常"
             description="文档解析已完成，可以进入方案设计阶段。"
@@ -232,13 +233,23 @@ const RequirementViewerPage: React.FC = () => {
             showIcon
             icon={<CheckCircleOutlined />}
             action={
-              <Button
-                type="primary"
-                icon={<FileTextOutlined />}
-                onClick={() => navigate(`/documents/${documentId}/design`)}
-              >
-                进入方案设计
-              </Button>
+              <Space>
+                <Button
+                  type="primary"
+                  icon={<FileTextOutlined />}
+                  onClick={() => navigate(`/documents/${documentId}/design`)}
+                >
+                  进入方案设计
+                </Button>
+                {(pipelineStatus === 'in_design' || pipelineStatus === 'design_reviewed') && (
+                  <Button
+                    icon={<EyeOutlined />}
+                    onClick={() => documentId && navigate(`/documents/${documentId}/design-review`)}
+                  >
+                    进入设计审查
+                  </Button>
+                )}
+              </Space>
             }
           />
         )}
