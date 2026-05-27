@@ -7,6 +7,10 @@ class DesignDocumentRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def add(self, design_doc: DesignDocument) -> DesignDocument:
+        self.db.add(design_doc)
+        return design_doc
+
     def create(self, design_doc: DesignDocument) -> DesignDocument:
         self.db.add(design_doc)
         self.db.commit()

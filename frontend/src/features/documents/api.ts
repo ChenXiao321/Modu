@@ -26,6 +26,7 @@ export async function initUpload(
     file_size_bytes: fileSizeBytes,
     file_type: fileType,
   })
+  checkSuccess(res)
   return res.data.data
 }
 
@@ -41,7 +42,8 @@ export async function uploadChunk(
   formData.append('checksum', checksum)
   formData.append('chunk_data', chunkBlob, `chunk_${chunkIndex}`)
 
-  await api.post('/documents/upload/chunk', formData)
+  const res = await api.post('/documents/upload/chunk', formData)
+  checkSuccess(res)
 }
 
 export async function completeUpload(
@@ -54,39 +56,43 @@ export async function completeUpload(
     total_chunks: totalChunks,
     sha256,
   })
+  checkSuccess(res)
   return res.data.data
 }
 
 export async function getDocumentStatus(documentId: string): Promise<DocumentStatus> {
   const res = await api.get(`/documents/${documentId}/status`)
+  checkSuccess(res)
   return res.data.data
 }
 
 export async function triggerParse(documentId: string): Promise<ParseTriggerResponse> {
   const res = await api.post(`/documents/${documentId}/parse`)
+  checkSuccess(res)
   return res.data.data
 }
 
 export async function getParseStatus(documentId: string): Promise<ParseStatusResponse> {
   const res = await api.get(`/documents/${documentId}/parse/status`)
+  checkSuccess(res)
   return res.data.data
 }
 
 export async function getRequirements(documentId: string): Promise<RequirementTreeNode[]> {
   const res = await api.get(`/documents/${documentId}/requirements`)
+  checkSuccess(res)
   return res.data.data.requirements
 }
 
 export async function getSafetyParameters(documentId: string): Promise<SafetyParameter[]> {
   const res = await api.get(`/documents/${documentId}/safety-parameters`)
+  checkSuccess(res)
   return res.data.data.parameters
 }
 
 export async function getOcrResults(documentId: string): Promise<{ pipelineStatus: string; blockReason?: string; fields: OcrField[] }> {
   const res = await api.get(`/documents/${documentId}/ocr-results`)
-  if (!res.data.success) {
-    throw new Error(res.data.error?.message || '获取 OCR 结果失败')
-  }
+  checkSuccess(res)
   return {
     pipelineStatus: res.data.data.pipeline_status,
     blockReason: res.data.data.block_reason,
@@ -102,32 +108,35 @@ export async function confirmOcrField(
   const res = await api.post(`/documents/${documentId}/ocr-fields/${fieldId}/confirm`, {
     reviewer_name: reviewerName,
   })
-  if (!res.data.success) {
-    throw new Error(res.data.error?.message || '确认字段失败')
-  }
+  checkSuccess(res)
   return res.data.data
 }
 
 export async function triggerDesignDocument(documentId: string): Promise<{ documentId: string; designTaskId: string; status: string }> {
   const res = await api.post(`/documents/${documentId}/design`)
+  checkSuccess(res)
   return res.data.data
 }
 
 export async function getDesignDocument(documentId: string): Promise<DesignDocument> {
   const res = await api.get(`/documents/${documentId}/design`)
+  checkSuccess(res)
   return res.data.data
 }
 
 export async function listDocuments(): Promise<DocumentListItem[]> {
   const res = await api.get('/documents')
+  checkSuccess(res)
   return res.data.data.items
 }
 
 // Design Review APIs (Story 2.2)
 
-function checkSuccess(res: any): void {
-  if (!res.data || !res.data.success) {
-    throw new Error(res.data?.error?.message || '请求失败')
+function checkSuccess(res: { data?: { success?: boolean; error?: { message?: string }; trace_id?: string } }): void {
+  if (!res.data?.success) {
+    const message = res.data?.error?.message || '请求失败'
+    const traceId = res.data?.trace_id
+    throw new Error(traceId ? `${message} (trace_id: ${traceId})` : message)
   }
 }
 

@@ -9,6 +9,10 @@ class SafetyParameterRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def add(self, parameter: SafetyCriticalParameter) -> SafetyCriticalParameter:
+        self.db.add(parameter)
+        return parameter
+
     def create(self, parameter: SafetyCriticalParameter) -> SafetyCriticalParameter:
         self.db.add(parameter)
         self.db.commit()

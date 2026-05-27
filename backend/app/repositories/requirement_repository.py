@@ -9,6 +9,10 @@ class RequirementRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def add(self, requirement: ParsedRequirement) -> ParsedRequirement:
+        self.db.add(requirement)
+        return requirement
+
     def create(self, requirement: ParsedRequirement) -> ParsedRequirement:
         self.db.add(requirement)
         self.db.commit()

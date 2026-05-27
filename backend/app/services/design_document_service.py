@@ -74,7 +74,9 @@ class DesignDocumentService:
                 document_id=document_id,
                 status="running",
             )
-            self.design_repo.create(design_doc)
+            self.design_repo.add(design_doc)
+            self.db.commit()
+            self.db.refresh(design_doc)
 
         return {
             "document_id": document_id,
