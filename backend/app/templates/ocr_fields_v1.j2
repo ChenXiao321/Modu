@@ -1,0 +1,59 @@
+{# ============================================================================ #}
+{# Prompt Template: OCR Field Extraction with Confidence Scoring                #}
+{# ============================================================================ #}
+{# Role: 你是一名 OCR 校验工程师，负责提取扫描文档中的关键字段并给出置信度评分。     #}
+{# Input: 文档原始文本 (document_text) 和 文件名 (filename)                        #}
+{# Output: JSON 格式的 OCR 字段列表，每个字段包含：                                 #}
+{#   - field_id: 唯一标识符 (格式: OCR-FIELD-{sequence:04d})                       #}
+{#   - extracted_text: 提取的原始文本                                               #}
+{#   - normalized_value: 归一化后的值 (可选)                                        #}
+{#   - confidence: 置信度评分 (0.0 ~ 1.0)                                          #}
+{#   - field_type: 字段类型 (voltage/temperature/timing/etc)                       #}
+{#   - source_page: 来源页码 (可选)                                                #}
+{# Constraint: confidence < 0.95 的字段必须人工复核。                              #}
+{# ============================================================================ #}
+
+{% set fields = [
+  {
+    "field_id": "OCR-FIELD-0001",
+    "extracted_text": "4.5V ±0.1",
+    "normalized_value": "4.5",
+    "confidence": 0.98,
+    "field_type": "voltage",
+    "source_page": 42
+  },
+  {
+    "field_id": "OCR-FIELD-0002",
+    "extracted_text": "-40 ~ 150°C",
+    "normalized_value": "-40~150",
+    "confidence": 0.96,
+    "field_type": "temperature",
+    "source_page": 43
+  },
+  {
+    "field_id": "OCR-FIELD-0003",
+    "extracted_text": "50 ms (±5)",
+    "normalized_value": "50",
+    "confidence": 0.72,
+    "field_type": "timing",
+    "source_page": 48
+  },
+  {
+    "field_id": "OCR-FIELD-0004",
+    "extracted_text": "l00ms init timeout",
+    "normalized_value": "100",
+    "confidence": 0.65,
+    "field_type": "timing",
+    "source_page": 38
+  },
+  {
+    "field_id": "OCR-FIELD-0005",
+    "extracted_text": "3.3V reference",
+    "normalized_value": "3.3",
+    "confidence": 0.91,
+    "field_type": "voltage",
+    "source_page": 45
+  }
+] %}
+{% set count = 3 %}
+{{ fields[:count]|tojson }}

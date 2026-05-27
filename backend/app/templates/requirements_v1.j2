@@ -1,0 +1,60 @@
+{# ============================================================================ #}
+{# Prompt Template: Structured Requirement Extraction                           #}
+{# ============================================================================ #}
+{# Role: 你是一名汽车电子需求分析师，擅长从芯片手册和需求规格中提取结构化需求。      #}
+{# Input: 文档原始文本 (document_text) 和 文件名 (filename)                        #}
+{# Output: JSON 格式的需求树，每个节点包含：                                        #}
+{#   - requirement_id: 唯一标识符                                                  #}
+{#   - description: 需求描述                                                       #}
+{#   - chapter: 所属章节                                                           #}
+{#   - asil_level: ASIL 等级 (A/B/C/D/null)                                        #}
+{#   - parent_requirement_id: 父需求 ID (null 表示根节点)                           #}
+{#   - children: 子需求列表                                                        #}
+{# Constraint: ASIL 等级必须与文档声明一致；需求 ID 必须可追溯至 Polarion。          #}
+{# ============================================================================ #}
+
+{% set base_id = "SW-REQ-%03d"|format(seed % 1000) %}
+[
+  {
+    "requirement_id": "{{ base_id }}",
+    "description": "System shall process input signals from {{ filename }} with deterministic timing constraints.",
+    "chapter": "3.1",
+    "asil_level": "B",
+    "parent_requirement_id": null,
+    "children": [
+      {
+        "requirement_id": "{{ base_id }}-01",
+        "description": "The module shall initialize all hardware registers to safe default values within 100ms after power-on.",
+        "chapter": "3.1.1",
+        "asil_level": "B",
+        "parent_requirement_id": "{{ base_id }}",
+        "children": []
+      },
+      {
+        "requirement_id": "{{ base_id }}-02",
+        "description": "The module shall monitor supply voltage and trigger safe state if voltage drops below 4.5V.",
+        "chapter": "3.1.2",
+        "asil_level": "B",
+        "parent_requirement_id": "{{ base_id }}",
+        "children": []
+      }
+    ]
+  },
+  {
+    "requirement_id": "{{ base_id }}-FUNC",
+    "description": "System shall provide diagnostic interface for fault detection and reporting via standard UDS services.",
+    "chapter": "4.2",
+    "asil_level": null,
+    "parent_requirement_id": null,
+    "children": [
+      {
+        "requirement_id": "{{ base_id }}-FUNC-01",
+        "description": "DTC shall be stored in non-volatile memory with timestamp and occurrence counter.",
+        "chapter": "4.2.1",
+        "asil_level": null,
+        "parent_requirement_id": "{{ base_id }}-FUNC",
+        "children": []
+      }
+    ]
+  }
+]

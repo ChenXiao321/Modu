@@ -1,0 +1,56 @@
+{# ============================================================================ #}
+{# Prompt Template: Safety-Critical Parameter Extraction                        #}
+{# ============================================================================ #}
+{# Role: 你是一名功能安全工程师，负责从文档中提取安全关键参数。                    #}
+{# Input: 文档原始文本 (document_text) 和 文件名 (filename)                        #}
+{# Output: JSON 格式的安全关键参数列表，每个参数包含：                              #}
+{#   - parameter_id: 唯一标识符 (如 SW-REQ-SAF-001)                                #}
+{#   - name: 参数名称                                                              #}
+{#   - value: 参数值                                                               #}
+{#   - unit: 单位 (可选)                                                           #}
+{#   - tolerance: 容差 (可选)                                                      #}
+{#   - chapter: 所属章节 (可选)                                                    #}
+{#   - source_page: 来源页码 (可选)                                                #}
+{# Constraint: 参数必须与文档中声明的安全机制直接相关。                            #}
+{# ============================================================================ #}
+
+{% set params = [
+  {
+    "parameter_id": "SW-REQ-SAF-001",
+    "name": "供电电压阈值",
+    "value": "4.5",
+    "unit": "V",
+    "tolerance": "±0.1",
+    "chapter": "3.2.1",
+    "source_page": 42
+  },
+  {
+    "parameter_id": "SW-REQ-SAF-002",
+    "name": "工作温度范围",
+    "value": "-40 ~ 150",
+    "unit": "°C",
+    "tolerance": null,
+    "chapter": "3.2.2",
+    "source_page": 43
+  },
+  {
+    "parameter_id": "SW-REQ-SAF-003",
+    "name": "看门狗喂狗周期",
+    "value": "50",
+    "unit": "ms",
+    "tolerance": "±5",
+    "chapter": "3.3.1",
+    "source_page": 48
+  },
+  {
+    "parameter_id": "SW-REQ-SAF-004",
+    "name": "初始化超时时间",
+    "value": "100",
+    "unit": "ms",
+    "tolerance": "+10/-0",
+    "chapter": "3.1.1",
+    "source_page": 38
+  }
+] %}
+{% set count = [seed % 4, params|length]|min %}
+{{ params[:count]|tojson }}
