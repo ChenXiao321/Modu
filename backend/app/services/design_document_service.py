@@ -215,11 +215,14 @@ class DesignDocumentService:
         reported_error = design.error_message
         if reported_status == "running":
             last_update = design.updated_at or design.created_at
-            if last_update and (
-                datetime.now(timezone.utc) - last_update
-            ).total_seconds() > _TIMEOUT_MINUTES * 60:
-                reported_status = "failed"
-                reported_error = "设计文档生成超时（超过10分钟）"
+            if last_update:
+                if last_update.tzinfo is None:
+                    last_update = last_update.replace(tzinfo=timezone.utc)
+                if (
+                    datetime.now(timezone.utc) - last_update
+                ).total_seconds() > _TIMEOUT_MINUTES * 60:
+                    reported_status = "failed"
+                    reported_error = "设计文档生成超时（超过10分钟）"
 
         return {
             "document_id": document_id,
