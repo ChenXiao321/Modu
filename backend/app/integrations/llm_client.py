@@ -1,3 +1,4 @@
+import hashlib
 from abc import ABC, abstractmethod
 
 
@@ -74,12 +75,16 @@ class LLMClient(ABC):
 class MockLLMClient(LLMClient):
     """
     Mock LLM client for MVP development and testing.
-    Returns deterministic simulated requirements based on document text length.
+    Returns deterministic simulated requirements based on a hash of inputs.
     """
 
+    def _make_seed(self, document_text: str, filename: str) -> int:
+        """Generate a deterministic integer seed from inputs."""
+        return int(hashlib.md5(f"{document_text}:{filename}".encode()).hexdigest(), 16)
+
     def extract_requirements(self, document_text: str, filename: str) -> list[dict]:
-        text_length = len(document_text)
-        base_id = f"SW-REQ-{text_length % 1000:03d}"
+        seed = self._make_seed(document_text, filename)
+        base_id = f"SW-REQ-{seed % 1000:03d}"
 
         return [
             {
@@ -143,9 +148,11 @@ class MockLLMClient(LLMClient):
 
     def extract_safety_parameters(self, document_text: str, filename: str) -> list[dict]:
         """Return deterministic mock safety-critical parameters."""
-        # Seed-based deterministic selection to keep tests stable
-        text_length = len(document_text)
+        # Empty document must return zero params to match test expectations.
+        if not document_text:
+            return []
 
+        seed = self._make_seed(document_text, filename)
         parameters = [
             {
                 "parameter_id": "SW-REQ-SAF-001",
@@ -185,8 +192,8 @@ class MockLLMClient(LLMClient):
             },
         ]
 
-        # Deterministically return a subset; short/empty docs may get zero params
-        count = min(len(parameters), text_length % 4)
+        # Deterministically return a subset based on hashed seed
+        count = min(len(parameters), seed % 4)
         return parameters[:count]
 
     def extract_ocr_fields(self, document_text: str, filename: str) -> list[dict]:
@@ -250,7 +257,8 @@ class MockLLMClient(LLMClient):
     ) -> dict:
         """Return a deterministic mock design document for MVP development."""
         effective_asil = asil_level or "QM"
-        base_trace = f"POL-DSGN-{len(filename) % 1000:03d}"
+        seed = self._make_seed("", filename)
+        base_trace = f"POL-DSGN-{seed % 1000:03d}"
 
         req_summary = "\n".join(
             f"- {r.get('requirement_id', 'N/A')}: {r.get('description', '')[:80]}"
