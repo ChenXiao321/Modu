@@ -30,5 +30,13 @@ class Settings(BaseSettings):
         "image/tiff",
     }
 
+    # LLM configuration
+    llm_provider: str = "mock"  # "mock" or "litellm"
+    llm_model: str = "kimi-k2-6"
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.moonshot.cn/v1"
+    llm_temperature: float = 0.2
+    llm_max_tokens: int = 8192
+
 
 settings = Settings()

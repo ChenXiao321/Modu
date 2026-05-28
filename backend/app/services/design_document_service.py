@@ -10,7 +10,8 @@ from app.exceptions import (
     DocumentNotReadyError,
     PipelineBlockedError,
 )
-from app.integrations.llm_client import LLMClient, MockLLMClient
+from app.config import settings
+from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
 from app.models.design_document import DesignDocument
 from app.repositories.design_document_repository import DesignDocumentRepository
 from app.repositories.document_repository import DocumentRepository
@@ -31,7 +32,18 @@ class DesignDocumentService:
         self.design_repo = DesignDocumentRepository(db)
         self.req_repo = RequirementRepository(db)
         self.safety_repo = SafetyParameterRepository(db)
-        self.llm_client: LLMClient = llm_client or MockLLMClient()
+        if llm_client is not None:
+            self.llm_client: LLMClient = llm_client
+        elif settings.llm_provider == "litellm":
+            self.llm_client: LLMClient = LiteLLMClient(
+                model=settings.llm_model,
+                api_key=settings.llm_api_key,
+                base_url=settings.llm_base_url or None,
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+            )
+        else:
+            self.llm_client: LLMClient = MockLLMClient()
 
     def trigger_generate(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)

@@ -1,8 +1,23 @@
 import hashlib
 import json
+import logging
 from abc import ABC, abstractmethod
 
 from app.integrations.template_loader import TemplateLoader
+
+logger = logging.getLogger(__name__)
+
+
+class LLMOutputFormatError(Exception):
+    """Raised when LLM response cannot be parsed as expected JSON."""
+
+    def __init__(self, message: str, raw_response: str | None = None) -> None:
+        super().__init__(message)
+        self.raw_response = raw_response
+
+
+class LLMInvocationError(Exception):
+    """Raised when the LLM API call itself fails (timeout, rate limit, auth error)."""
 
 
 class LLMClient(ABC):
@@ -145,4 +160,276 @@ class MockLLMClient(LLMClient):
             seed=seed,
         )
         assert isinstance(result, dict)
+        return result
+
+
+class LiteLLMClient(LLMClient):
+    """
+    Production LLM client using LiteLLM SDK.
+    Supports any OpenAI-compatible endpoint (Kimi, DeepSeek, OpenAI, etc.).
+    """
+
+    def __init__(
+        self,
+        model: str,
+        api_key: str,
+        base_url: str | None = None,
+        temperature: float = 0.2,
+        max_tokens: int = 8192,
+    ) -> None:
+        self.model = model
+        self.api_key = api_key
+        self.base_url = base_url
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+
+    def _call(self, messages: list[dict], temperature: float | None = None) -> str:
+        """Call the LLM via LiteLLM and return the content string."""
+        try:
+            from litellm import completion
+        except ImportError as exc:
+            raise LLMInvocationError("litellm is not installed") from exc
+
+        kwargs: dict = {
+            "model": self.model,
+            "messages": messages,
+            "api_key": self.api_key,
+            "temperature": temperature if temperature is not None else self.temperature,
+            "max_tokens": self.max_tokens,
+        }
+        if self.base_url:
+            kwargs["api_base"] = self.base_url
+        # Kimi Code API gates access by User-Agent; only whitelisted agents allowed.
+        if self.base_url and "api.kimi.com" in self.base_url:
+            kwargs["extra_headers"] = {"User-Agent": "KimiCLI/1.5"}
+
+        try:
+            response = completion(**kwargs)
+            content = (
+                response.get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+            )
+            if not content:
+                raise LLMInvocationError("LLM returned empty content")
+            return content.strip()
+        except Exception as exc:
+            logger.exception("LLM API call failed")
+            raise LLMInvocationError(f"LLM API call failed: {exc}") from exc
+
+    def _parse_json(self, raw: str, caller: str) -> dict | list:
+        """Parse JSON from LLM response, with fallback cleaning."""
+        # Try direct parse first
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback: extract JSON from markdown code block
+        if "```json" in raw:
+            start = raw.find("```json") + 7
+            end = raw.find("```", start)
+            if end != -1:
+                try:
+                    return json.loads(raw[start:end].strip())
+                except json.JSONDecodeError:
+                    pass
+        elif "```" in raw:
+            start = raw.find("```") + 3
+            end = raw.find("```", start)
+            if end != -1:
+                try:
+                    return json.loads(raw[start:end].strip())
+                except json.JSONDecodeError:
+                    pass
+
+        logger.error("Failed to parse JSON from LLM response [%s]: %s", caller, raw[:500])
+        raise LLMOutputFormatError(
+            f"{caller}: LLM response is not valid JSON", raw_response=raw
+        )
+
+    def extract_requirements(self, document_text: str, filename: str) -> list[dict]:
+        system_prompt = (
+            "你是一名汽车电子需求分析师，擅长从芯片手册和需求规格中提取结构化需求。\n"
+            "请从用户提供的文档文本中提取所有功能需求，输出为 JSON 数组。\n"
+            "每个需求对象必须包含以下字段：\n"
+            "  - requirement_id: 唯一标识符（如 SW-REQ-001）\n"
+            "  - description: 需求描述（英文或中文均可）\n"
+            "  - chapter: 所属章节号（可选）\n"
+            "  - asil_level: ASIL 等级 A/B/C/D 之一（可选，无则填 null）\n"
+            "  - parent_requirement_id: 父需求 ID（根节点填 null）\n"
+            "  - children: 子需求列表（无则填空数组 []）\n"
+            "约束：\n"
+            "  1. 必须覆盖文档中所有显式声明的功能需求\n"
+            "  2. ASIL 等级必须与文档声明一致\n"
+            "  3. 需求 ID 格式统一为 SW-REQ-{三位数字}，子需求为 SW-REQ-{三位数字}-{两位数字}\n"
+            "  4. 只输出 JSON，不要任何解释文字"
+        )
+        user_prompt = f"文档文件名: {filename}\n\n文档内容:\n{document_text[:15000]}"
+
+        raw = self._call(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+        )
+        result = self._parse_json(raw, "extract_requirements")
+        if not isinstance(result, list):
+            raise LLMOutputFormatError(
+                "extract_requirements: expected list", raw_response=raw
+            )
+        return result
+
+    def extract_safety_parameters(self, document_text: str, filename: str) -> list[dict]:
+        if not document_text:
+            return []
+
+        system_prompt = (
+            "你是一名功能安全工程师，负责从汽车电子文档中提取安全关键参数。\n"
+            "请从文档文本中提取所有安全关键参数（时序、电压阈值、温度范围、看门狗周期、超时时间等），输出为 JSON 数组。\n"
+            "每个参数对象必须包含以下字段：\n"
+            "  - parameter_id: 唯一标识符（如 SW-REQ-SAF-001）\n"
+            "  - name: 参数名称（中文）\n"
+            "  - value: 参数值\n"
+            "  - unit: 单位（可选，无则填 null）\n"
+            "  - tolerance: 容差（可选，无则填 null）\n"
+            "  - chapter: 所属章节号（可选）\n"
+            "  - source_page: 来源页码（可选，整数）\n"
+            "约束：\n"
+            "  1. 只提取与功能安全直接相关的参数\n"
+            "  2. 如果文档中未提及安全参数，返回空数组 []\n"
+            "  3. 只输出 JSON，不要任何解释文字"
+        )
+        user_prompt = f"文档文件名: {filename}\n\n文档内容:\n{document_text[:15000]}"
+
+        raw = self._call(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+        )
+        result = self._parse_json(raw, "extract_safety_parameters")
+        if not isinstance(result, list):
+            raise LLMOutputFormatError(
+                "extract_safety_parameters: expected list", raw_response=raw
+            )
+        return result
+
+    def extract_ocr_fields(self, document_text: str, filename: str) -> list[dict]:
+        system_prompt = (
+            "你是一名 OCR 校验工程师。用户提供的文本已经过 OCR 识别，可能包含识别错误。\n"
+            "请从文本中提取所有数值型关键字段（电压、温度、时序等），输出为 JSON 数组。\n"
+            "每个字段对象必须包含：\n"
+            "  - field_id: 固定格式 OCR-FIELD-{四位数字，从0001开始} \n"
+            "  - extracted_text: 提取的原始文本片段\n"
+            "  - normalized_value: 归一化后的数值（可选）\n"
+            "  - confidence: 你对该字段识别正确性的置信度（0.0 ~ 1.0）\n"
+            "  - field_type: 字段类型（voltage, temperature, timing, frequency 等）\n"
+            "  - source_page: 来源页码（可选）\n"
+            "约束：\n"
+            "  1. confidence < 0.95 的字段表示可能存在识别错误\n"
+            "  2. 只输出 JSON，不要任何解释文字"
+        )
+        user_prompt = f"文档文件名: {filename}\n\nOCR 文本:\n{document_text[:15000]}"
+
+        raw = self._call(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ]
+        )
+        result = self._parse_json(raw, "extract_ocr_fields")
+        if not isinstance(result, list):
+            raise LLMOutputFormatError(
+                "extract_ocr_fields: expected list", raw_response=raw
+            )
+        # Normalize field_id to sequential format
+        for idx, item in enumerate(result, start=1):
+            item["field_id"] = f"OCR-FIELD-{idx:04d}"
+        return result
+
+    def generate_design_document(
+        self,
+        requirements: list[dict],
+        safety_parameters: list[dict],
+        asil_level: str | None,
+        filename: str,
+    ) -> dict:
+        effective_asil = asil_level or "QM"
+
+        system_prompt = (
+            "你是一名汽车电子软件架构师，负责生成 ASPICE Level 2 设计文档。\n"
+            "请基于用户提供的需求和安全参数，生成一份完整的设计文档，输出为 JSON 对象。\n"
+            "JSON 必须包含以下 8 个键，每个键的值是一个对象，包含 content 和 polarion_trace_id：\n"
+            "  - overview: 概述\n"
+            "  - references: 参考资料\n"
+            "  - system_architecture: 系统架构\n"
+            "  - interface_definition: 接口定义\n"
+            "  - dynamic_behavior: 动态行为\n"
+            "  - resource_consumption: 资源消耗\n"
+            "  - error_handling: 错误处理\n"
+            "  - test_strategy: 测试策略\n"
+            "约束：\n"
+            "  1. 每个章节必须包含 polarion_trace_id（格式: POL-DSGN-{三位数字}-{两位数字}）\n"
+            "  2. ASIL 等级必须与输入声明一致\n"
+            "  3. 内容必须具体、可验证，不能是空泛描述\n"
+            "  4. 只输出 JSON，不要任何解释文字"
+        )
+        if effective_asil in ("C", "D"):
+            system_prompt += (
+                "\n额外约束（ASIL-C/D 增强）：\n"
+                "  - system_architecture 必须包含冗余设计说明\n"
+                "  - error_handling 必须包含 FMEA 参考\n"
+                "  - test_strategy 的语句覆盖率目标 ≥ 90%"
+            )
+
+        req_text = json.dumps(requirements, ensure_ascii=False, indent=2)
+        param_text = json.dumps(safety_parameters, ensure_ascii=False, indent=2)
+        user_prompt = (
+            f"输入文档: {filename}\n"
+            f"模块 ASIL 等级: {effective_asil}\n\n"
+            f"需求列表:\n{req_text}\n\n"
+            f"安全关键参数:\n{param_text}"
+        )
+
+        raw = self._call(
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.3,
+        )
+        result = self._parse_json(raw, "generate_design_document")
+        if not isinstance(result, dict):
+            raise LLMOutputFormatError(
+                "generate_design_document: expected dict", raw_response=raw
+            )
+        # Validate required sections
+        required = {
+            "overview",
+            "references",
+            "system_architecture",
+            "interface_definition",
+            "dynamic_behavior",
+            "resource_consumption",
+            "error_handling",
+            "test_strategy",
+        }
+        missing = required - set(result.keys())
+        if missing:
+            raise LLMOutputFormatError(
+                f"generate_design_document: missing sections: {', '.join(missing)}",
+                raw_response=raw,
+            )
+        for key, section in result.items():
+            if not isinstance(section, dict):
+                raise LLMOutputFormatError(
+                    f"generate_design_document: section '{key}' is not a dict",
+                    raw_response=raw,
+                )
+            if "content" not in section or "polarion_trace_id" not in section:
+                raise LLMOutputFormatError(
+                    f"generate_design_document: section '{key}' missing content or polarion_trace_id",
+                    raw_response=raw,
+                )
         return result

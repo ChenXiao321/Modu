@@ -11,7 +11,8 @@ from app.exceptions import (
     FieldNotFoundError,
     PipelineNotBlockedError,
 )
-from app.integrations.llm_client import LLMClient, MockLLMClient
+from app.config import settings
+from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
 from app.models.document import Document
 from app.models.ocr_extraction_result import OcrExtractionResult
 from app.models.parsed_requirement import ParsedRequirement
@@ -44,7 +45,16 @@ class DocumentParseService:
         self.req_repo = RequirementRepository(db)
         self.safety_repo = SafetyParameterRepository(db)
         self.ocr_repo = OcrResultRepository(db)
-        self.llm_client: LLMClient = MockLLMClient()
+        if settings.llm_provider == "litellm":
+            self.llm_client: LLMClient = LiteLLMClient(
+                model=settings.llm_model,
+                api_key=settings.llm_api_key,
+                base_url=settings.llm_base_url or None,
+                temperature=settings.llm_temperature,
+                max_tokens=settings.llm_max_tokens,
+            )
+        else:
+            self.llm_client: LLMClient = MockLLMClient()
 
     def trigger_parse(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
