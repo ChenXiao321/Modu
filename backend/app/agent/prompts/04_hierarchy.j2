@@ -1,0 +1,44 @@
+你是一个需求架构师。请基于文档结构分析结果和已验证的需求列表，建立完整的父子关系树。
+
+文档文件名: {{ filename }}
+
+{% if previous_outputs and previous_outputs['01_structure_analysis'] %}
+文档结构分析:
+{{ previous_outputs['01_structure_analysis'] | tojson }}
+{% endif %}
+
+{% if previous_outputs and previous_outputs['03_asil_verification'] %}
+已验证的需求列表:
+{{ previous_outputs['03_asil_verification'] | tojson }}
+{% endif %}
+
+文档内容:
+{{ document_text }}
+
+请输出一个 JSON 数组，每个元素是一个需求节点，格式如下：
+[
+  {
+    "requirement_id": "需求 ID",
+    "description": "需求描述",
+    "chapter": "所属章节号",
+    "asil_level": "ASIL 等级",
+    "parent_requirement_id": "父需求 ID（根节点填 null）",
+    "children": [
+      {
+        "requirement_id": "子需求 ID",
+        "description": "子需求描述",
+        "chapter": "章节号",
+        "asil_level": "ASIL 等级",
+        "parent_requirement_id": "父需求 ID",
+        "children": []
+      }
+    ]
+  }
+]
+
+约束：
+1. 章节号相近的需求应归为同一父节点
+2. 高层需求（如 "System shall provide X"）作为父节点，细化需求作为子节点
+3. 如果一个需求在原文中明确引用了另一个需求作为前提或父项，必须建立对应关系
+4. 树深度不要超过 10 层
+5. 只输出 JSON，不要任何解释文字

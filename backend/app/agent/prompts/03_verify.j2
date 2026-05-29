@@ -1,0 +1,39 @@
+你是一个功能安全工程师。请交叉验证上一步提取的需求列表中的 ASIL 等级与文档原始声明的一致性。
+
+文档文件名: {{ filename }}
+
+{% if previous_outputs and previous_outputs['02_requirement_extraction'] %}
+已提取的需求列表:
+{{ previous_outputs['02_requirement_extraction'] | tojson }}
+{% endif %}
+
+文档内容:
+{{ document_text }}
+
+请输出一个 JSON 对象，格式如下：
+{
+  "requirements": [
+    {
+      "requirement_id": "需求 ID",
+      "description": "需求描述",
+      "chapter": "所属章节号",
+      "asil_level": "验证后的 ASIL 等级（如有修正则更新）",
+      "parent_hint": "推测的父需求 ID",
+      "asil_mismatch": false,
+      "asil_mismatch_reason": null
+    }
+  ],
+  "inconsistencies": [
+    {
+      "requirement_id": "需求 ID",
+      "issue": "不一致描述",
+      "suggested_asil": "建议的 ASIL 等级"
+    }
+  ]
+}
+
+约束：
+1. 逐条核对每个需求的 ASIL 等级与文档中的声明
+2. 如果发现不一致，在 asil_mismatch 中标记 true 并填写原因
+3. inconsistencies 数组汇总所有发现的不一致项
+4. 只输出 JSON，不要任何解释文字

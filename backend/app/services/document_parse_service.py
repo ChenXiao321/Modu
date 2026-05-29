@@ -11,11 +11,18 @@ from app.exceptions import (
     FieldNotFoundError,
     PipelineNotBlockedError,
 )
+from pathlib import Path
+
+from app.agent.checklist import ChecklistValidator
+from app.agent.loader import load_checklists
+from app.agent.steps import build_default_steps
+from app.agent.workflow import AgentWorkflowEngine, WorkflowContext, WorkflowFailedError
 from app.config import settings
 from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
 from app.models.document import Document
 from app.models.ocr_extraction_result import OcrExtractionResult
 from app.models.parsed_requirement import ParsedRequirement
+from app.repositories.agent_workflow_repository import AgentWorkflowRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.ocr_result_repository import OcrResultRepository
 from app.repositories.requirement_repository import RequirementRepository
@@ -96,7 +103,14 @@ class DocumentParseService:
 
         try:
             text = TextExtractor.extract(doc.storage_path, doc.file_type)
-            raw_requirements = self.llm_client.extract_requirements(text, doc.original_filename)
+
+            # Agent workflow for real LLM; direct extraction for Mock (backward compatible)
+            if settings.llm_provider == "litellm":
+                raw_requirements = self._execute_agent_workflow(
+                    tenant_id, document_id, text, doc.original_filename, doc.parse_task_id
+                )
+            else:
+                raw_requirements = self.llm_client.extract_requirements(text, doc.original_filename)
 
             # Validate depth before touching DB
             self._validate_tree_depth(raw_requirements)
@@ -135,6 +149,9 @@ class DocumentParseService:
             logger.info("Parse completed for document %s", document_id)
         except TextExtractorError as e:
             logger.error("Text extraction failed for document %s: %s", document_id, e.message)
+            self.doc_repo.update_parse_status(document_id, tenant_id, "failed")
+        except WorkflowFailedError as exc:
+            logger.error("Agent workflow failed for document %s: %s", document_id, exc)
             self.doc_repo.update_parse_status(document_id, tenant_id, "failed")
         except Exception:
             logger.exception("Unexpected parse failure for document %s", document_id)
@@ -461,3 +478,69 @@ class DocumentParseService:
             "block_reason": doc.block_reason,
             "all_confirmed": low_conf_count == 0,
         }
+
+    def _execute_agent_workflow(
+        self,
+        tenant_id: int,
+        document_id: str,
+        text: str,
+        filename: str,
+        parse_task_id: str | None,
+    ) -> list[dict]:
+        """Run the 4-step Agent workflow and return the requirement tree."""
+        workflow_repo = AgentWorkflowRepository(self.db)
+        run = workflow_repo.create(tenant_id, document_id, parse_task_id)
+        workflow_repo.update_status(run.id, tenant_id, "running", current_step=0)
+
+        template_dir = Path(__file__).parent.parent / "agent" / "prompts"
+        steps = build_default_steps(template_dir)
+
+        user_rules = load_checklists()
+        checklist_validator = ChecklistValidator(user_rules)
+
+        context = WorkflowContext(
+            document_text=text,
+            filename=filename,
+            tenant_id=tenant_id,
+            document_id=document_id,
+        )
+
+        engine = AgentWorkflowEngine(
+            steps=steps,
+            llm_client=self.llm_client,
+            checklist_validator=checklist_validator,
+        )
+
+        def on_step_complete(step_name: str, record: Any) -> None:
+            steps_data = workflow_repo.get_steps_data(run.id, tenant_id)
+            steps_data[step_name] = {
+                "status": record.status,
+                "output": record.output,
+                "raw_llm_response": record.raw_llm_response,
+                "violations": record.violations,
+                "retry_count": record.retry_count,
+                "error_message": record.error_message,
+            }
+            workflow_repo.update_steps_data(run.id, tenant_id, steps_data)
+            # Update current step index for observability
+            step_index = next((i for i, s in enumerate(steps) if s.name == step_name), 0)
+            workflow_repo.update_status(run.id, tenant_id, "running", current_step=step_index + 1)
+
+        try:
+            result = engine.run(context, on_step_complete=on_step_complete)
+        except WorkflowFailedError:
+            workflow_repo.update_status(run.id, tenant_id, "failed")
+            raise
+
+        workflow_repo.update_status(run.id, tenant_id, "completed", current_step=len(steps))
+
+        # Extract the final requirement tree from step 4
+        hierarchy_record = result.get("04_hierarchy_resolution")
+        if hierarchy_record is None or hierarchy_record.output is None:
+            raise WorkflowFailedError("04_hierarchy_resolution did not produce output")
+
+        raw_requirements = hierarchy_record.output
+        if not isinstance(raw_requirements, list):
+            raise WorkflowFailedError("04_hierarchy_resolution output is not a list")
+
+        return raw_requirements

@@ -1,0 +1,29 @@
+你是一个汽车电子需求分析师。请基于前一步的文档结构分析结果，从文档中提取所有功能需求。
+
+文档文件名: {{ filename }}
+
+{% if previous_outputs and previous_outputs['01_structure_analysis'] %}
+文档结构分析结果:
+{{ previous_outputs['01_structure_analysis'] | tojson }}
+{% endif %}
+
+文档内容:
+{{ document_text }}
+
+请输出一个 JSON 数组，每个元素是一个需求对象，格式如下：
+[
+  {
+    "requirement_id": "唯一标识符（如 SW-REQ-001）",
+    "description": "需求描述",
+    "chapter": "所属章节号（可选）",
+    "asil_level": "ASIL 等级 A/B/C/D/QM 之一（可选，无则填 null）",
+    "parent_hint": "推测的父需求 ID（如 SW-REQ-001），无则填 null"
+  }
+]
+
+约束：
+1. 必须覆盖文档中所有显式声明的功能需求
+2. ASIL 等级必须与文档声明一致
+3. 需求 ID 格式统一为 SW-REQ-{三位数字}
+4. 此步骤只提取扁平列表，不建立树形关系（parent_hint 仅为提示）
+5. 只输出 JSON，不要任何解释文字
