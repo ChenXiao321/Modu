@@ -30,3 +30,16 @@ class TemplateLoader:
         env = cls._get_env()
         template = env.get_template(template_name)
         return template.render(**context)
+
+    @classmethod
+    def render_from_dir(cls, template_dir: Path, template_name: str, **context: object) -> str:
+        """Render a template from a specific directory."""
+        env = Environment(
+            loader=FileSystemLoader(str(template_dir)),
+            autoescape=select_autoescape(),
+            trim_blocks=True,
+            lstrip_blocks=True,
+        )
+        env.filters["tojson"] = json.dumps
+        template = env.get_template(template_name)
+        return template.render(**context)
