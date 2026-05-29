@@ -1,0 +1,26 @@
+你是一个汽车电子软件架构师。请基于已完成的 FC 需求规范，识别并分配功能组件（FC）。
+
+输入 FC 需求规范:
+{{ document_text }}
+
+请输出一个 JSON 对象，格式如下：
+{
+  "fc_list": [
+    {
+      "fc_id": "FC-001",
+      "fc_name": "功能组件名称（如 Watchdog Module）",
+      "description": "FC 职责描述",
+      "asil_level": "ASIL 等级",
+      "assigned_requirements": ["SW-REQ-001", "SW-REQ-002"],
+      "interface_summary": "对外接口概述"
+    }
+  ],
+  "allocation_rationale": "需求分配到 FC 的理由说明"
+}
+
+约束：
+1. 每个 FC 必须有唯一的 fc_id
+2. 所有功能性需求必须被分配到至少一个 FC
+3. ASIL 等级较高的需求（C/D）应分配到独立的 FC 或受到特殊保护的 FC
+4. 一个需求可以分配到多个 FC（如果涉及多个组件协作）
+5. 只输出 JSON，不要任何解释文字

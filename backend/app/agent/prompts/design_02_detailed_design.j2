@@ -1,0 +1,77 @@
+你是一个汽车电子软件详细设计工程师。请基于 FC 需求规范和 FC 识别结果，生成完整的软件详细设计规范。
+
+输入 FC 需求规范:
+{{ document_text }}
+
+{% if previous_outputs and previous_outputs['design_01_fc_identification'] %}
+FC 识别结果:
+{{ previous_outputs['design_01_fc_identification'] | tojson }}
+{% endif %}
+
+请输出一个 JSON 对象，严格遵循以下软件详细设计规范结构：
+{
+  "project_number": "项目编号",
+  "document_version": "版本号",
+  "status": "文档状态",
+  "overview": "概述：描述设计背景、软件架构、功能框图",
+  "fc_architecture": {
+    "description": "FC 架构总体描述",
+    "fc_modules": [
+      {
+        "fc_id": "FC-001",
+        "fc_name": "FC 名称",
+        "description": "FC 职责",
+        "asil_level": "ASIL 等级",
+        "external_interfaces": [
+          {
+            "function_name": "函数名称",
+            "parameters": [{"name": "参数名", "type": "参数类型", "description": "描述"}],
+            "return_type": "返回值类型",
+            "description": "接口功能描述"
+          }
+        ],
+        "internal_interfaces": [
+          {
+            "function_name": "函数名称",
+            "parameters": [{"name": "参数名", "type": "参数类型", "description": "描述"}],
+            "return_type": "返回值类型",
+            "description": "接口功能描述"
+          }
+        ],
+        "state_machine": "状态机描述（可选）",
+        "call_relationships": ["调用的其他 FC"]
+      }
+    ],
+    "call_graph": "调用关系图描述"
+  },
+  "detailed_design": [
+    {
+      "fc_id": "FC-001",
+      "functions": [
+        {
+          "function_name": "函数名称",
+          "purpose": "函数目的",
+          "algorithm": "算法实现步骤描述（或流程图文本表示）",
+          "data_structures": [{"name": "结构体/变量名", "type": "类型", "description": "描述"}],
+          "cyclomatic_complexity": "预估圈复杂度"
+        }
+      ]
+    }
+  ],
+  "safety_design": {
+    "redundancy_measures": "冗余设计措施（ASIL-C/D 必填）",
+    "fault_handling": "故障处理策略",
+    "fmea_reference": "FMEA 参考（ASIL-C/D 必填）"
+  },
+  "verification_strategy": {
+    "unit_test_coverage_target": "单元测试覆盖率目标",
+    "review_checklist_reference": "评审检查表引用"
+  }
+}
+
+约束：
+1. 每个 FC 的外部接口和内部接口必须完整定义（函数名、参数、返回值）
+2. 算法实现步骤必须具体、可验证，不能是空泛描述
+3. ASIL-C/D 的 FC 必须包含冗余设计说明和 FMEA 参考
+4. 圈复杂度：手写代码 < 15，模型开发 < 50
+5. 只输出 JSON，不要任何解释文字

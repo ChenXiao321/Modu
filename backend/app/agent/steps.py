@@ -329,6 +329,91 @@ class HierarchyResolutionStep(Step):
         return result
 
 
+class FcIdentificationStep(Step):
+    """Design Step 1: Identify FCs and allocate requirements."""
+
+    def __init__(self, template_dir: Path) -> None:
+        super().__init__(
+            name="design_01_fc_identification",
+            prompt_template="design_01_fc_identification.j2",
+            template_dir=template_dir,
+        )
+
+    def build_prompt(self, context: WorkflowContext) -> str:
+        from app.integrations.template_loader import TemplateLoader
+
+        return TemplateLoader.render_from_dir(
+            self.template_dir,
+            self.prompt_template,
+            document_text=_truncate_document_text(context.document_text),
+            filename=context.filename,
+            previous_outputs=context.previous_outputs,
+        )
+
+    def parse_output(self, raw: str) -> dict[str, Any]:
+        cleaned = _clean_json_response(raw)
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            raise LLMOutputFormatError(
+                f"design_01_fc_identification: invalid JSON: {exc}", raw_response=raw
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise LLMOutputFormatError(
+                "design_01_fc_identification: expected JSON object", raw_response=raw
+            )
+
+        fc_list = data.get("fc_list") or []
+        if not isinstance(fc_list, list):
+            raise LLMOutputFormatError(
+                "design_01_fc_identification: 'fc_list' must be a list", raw_response=raw
+            )
+
+        return {
+            "fc_list": fc_list,
+            "allocation_rationale": data.get("allocation_rationale"),
+        }
+
+
+class DetailedDesignStep(Step):
+    """Design Step 2: Generate software detailed design specification."""
+
+    def __init__(self, template_dir: Path) -> None:
+        super().__init__(
+            name="design_02_detailed_design",
+            prompt_template="design_02_detailed_design.j2",
+            template_dir=template_dir,
+        )
+
+    def build_prompt(self, context: WorkflowContext) -> str:
+        from app.integrations.template_loader import TemplateLoader
+
+        return TemplateLoader.render_from_dir(
+            self.template_dir,
+            self.prompt_template,
+            document_text=_truncate_document_text(context.document_text),
+            filename=context.filename,
+            previous_outputs=context.previous_outputs,
+        )
+
+    def parse_output(self, raw: str) -> dict[str, Any]:
+        cleaned = _clean_json_response(raw)
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            raise LLMOutputFormatError(
+                f"design_02_detailed_design: invalid JSON: {exc}", raw_response=raw
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise LLMOutputFormatError(
+                "design_02_detailed_design: expected JSON object", raw_response=raw
+            )
+
+        return data
+
+
 def build_default_steps(template_dir: Path) -> list[Step]:
     """Return the default 4-step pipeline."""
     return [
@@ -336,4 +421,12 @@ def build_default_steps(template_dir: Path) -> list[Step]:
         RequirementExtractionStep(template_dir),
         AsilVerificationStep(template_dir),
         HierarchyResolutionStep(template_dir),
+    ]
+
+
+def build_design_steps(template_dir: Path) -> list[Step]:
+    """Return the 2-step design document generation pipeline."""
+    return [
+        FcIdentificationStep(template_dir),
+        DetailedDesignStep(template_dir),
     ]
