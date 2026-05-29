@@ -1,10 +1,15 @@
-你是一个需求架构师。请基于文档结构分析结果和已验证的需求列表，建立完整的父子关系树。
+你是一个需求架构师和 FC 规范编写专家。请基于前序步骤的结果，生成一份完整的 FC（功能组件）需求规范文档。
 
 文档文件名: {{ filename }}
 
 {% if previous_outputs and previous_outputs['01_structure_analysis'] %}
 文档结构分析:
 {{ previous_outputs['01_structure_analysis'] | tojson }}
+{% endif %}
+
+{% if previous_outputs and previous_outputs['02_requirement_extraction'] %}
+已提取的需求列表:
+{{ previous_outputs['02_requirement_extraction'] | tojson }}
 {% endif %}
 
 {% if previous_outputs and previous_outputs['03_asil_verification'] %}
@@ -15,30 +20,44 @@
 文档内容:
 {{ document_text }}
 
-请输出一个 JSON 数组，每个元素是一个需求节点，格式如下：
-[
-  {
-    "requirement_id": "需求 ID",
-    "description": "需求描述",
-    "chapter": "所属章节号",
-    "asil_level": "ASIL 等级",
-    "parent_requirement_id": "父需求 ID（根节点填 null）",
-    "children": [
-      {
-        "requirement_id": "子需求 ID",
-        "description": "子需求描述",
-        "chapter": "章节号",
-        "asil_level": "ASIL 等级",
-        "parent_requirement_id": "父需求 ID",
-        "children": []
-      }
-    ]
-  }
-]
+请输出一个 JSON 对象，严格遵循以下 FC 需求规范结构：
+{
+  "project_number": "项目编号（可从文件名或文档内容推断，无则填 null）",
+  "author": "作者（无则填 null）",
+  "version": "版本号（无则填 null）",
+  "status": "状态（如 草稿/已评审/已批准，无则填 null）",
+  "purpose": "本 FC 需求规范的目的（1-3 段话）",
+  "scope": "适用范围（描述本规范覆盖的 FC 范围和不覆盖的内容）",
+  "definitions": [
+    {"term": "术语", "definition": "定义"}
+  ],
+  "overview": "概述：描述需求背景、软件架构、功能框图、需求分组结构等",
+  "functional_requirements": [
+    {
+      "category": "底层软件 BSW 或 应用层软件 ASW",
+      "items": [
+        {
+          "requirement_id": "SW-REQ-001",
+          "description": "需求描述",
+          "chapter": "章节号",
+          "asil_level": "ASIL 等级",
+          "parent_requirement_id": "父需求 ID（根节点填 null）",
+          "children": []
+        }
+      ]
+    }
+  ],
+  "non_functional_requirements": [
+    {"description": "非功能性需求描述，如 MISRA 2012 规范、建模规范等"}
+  ],
+  "notes": "信息和备注（不要求追溯和实现的内容，无则填 null）",
+  "supporting_documents": ["相关性文件列表，无则填 []"]
+}
 
 约束：
-1. 章节号相近的需求应归为同一父节点
-2. 高层需求（如 "System shall provide X"）作为父节点，细化需求作为子节点
-3. 如果一个需求在原文中明确引用了另一个需求作为前提或父项，必须建立对应关系
-4. 树深度不要超过 10 层
-5. 只输出 JSON，不要任何解释文字
+1. purpose、scope、overview 必须基于文档原文内容生成，不能虚构
+2. definitions 应包含文档中出现的关键缩写和专有名词
+3. functional_requirements 必须按 BSW（底层软件）和 ASW（应用层软件）分组
+4. 每个功能性需求必须包含 requirement_id、description、chapter、asil_level
+5. 需求树深度不要超过 10 层
+6. 只输出 JSON，不要任何解释文字

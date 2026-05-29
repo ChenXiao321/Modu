@@ -24,6 +24,7 @@ from app.models.ocr_extraction_result import OcrExtractionResult
 from app.models.parsed_requirement import ParsedRequirement
 from app.repositories.agent_workflow_repository import AgentWorkflowRepository
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.fc_requirement_repository import FcRequirementRepository
 from app.repositories.ocr_result_repository import OcrResultRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.safety_parameter_repository import SafetyParameterRepository
@@ -106,9 +107,15 @@ class DocumentParseService:
 
             # Agent workflow for real LLM; direct extraction for Mock (backward compatible)
             if settings.llm_provider == "litellm":
-                raw_requirements = self._execute_agent_workflow(
+                fc_spec = self._execute_agent_workflow(
                     tenant_id, document_id, text, doc.original_filename, doc.parse_task_id
                 )
+                # Persist FC specification
+                fc_repo = FcRequirementRepository(self.db)
+                fc_repo.delete_by_document(document_id, tenant_id)
+                fc_repo.create(tenant_id, document_id, fc_spec)
+                # Extract requirement tree from FC spec for backward-compatible API
+                raw_requirements = self._extract_requirements_from_fc_spec(fc_spec)
             else:
                 raw_requirements = self.llm_client.extract_requirements(text, doc.original_filename)
 
@@ -156,6 +163,15 @@ class DocumentParseService:
         except Exception:
             logger.exception("Unexpected parse failure for document %s", document_id)
             self.doc_repo.update_parse_status(document_id, tenant_id, "failed")
+
+    def _extract_requirements_from_fc_spec(self, fc_spec: dict[str, Any]) -> list[dict]:
+        """Extract requirement tree from FC specification for backward-compatible API."""
+        functional_reqs = fc_spec.get("functional_requirements") or []
+        all_items: list[dict] = []
+        for category in functional_reqs:
+            items = category.get("items") or []
+            all_items.extend(items)
+        return all_items
 
     def _validate_tree_depth(self, nodes: List[dict], current_depth: int = 1) -> None:
         if current_depth > _MAX_TREE_DEPTH:
@@ -486,8 +502,8 @@ class DocumentParseService:
         text: str,
         filename: str,
         parse_task_id: str | None,
-    ) -> list[dict]:
-        """Run the 4-step Agent workflow and return the requirement tree."""
+    ) -> dict[str, Any]:
+        """Run the 4-step Agent workflow and return FC requirement specification."""
         workflow_repo = AgentWorkflowRepository(self.db)
         run = workflow_repo.create(tenant_id, document_id, parse_task_id)
         workflow_repo.update_status(run.id, tenant_id, "running", current_step=0)
@@ -522,7 +538,6 @@ class DocumentParseService:
                 "error_message": record.error_message,
             }
             workflow_repo.update_steps_data(run.id, tenant_id, steps_data)
-            # Update current step index for observability
             step_index = next((i for i, s in enumerate(steps) if s.name == step_name), 0)
             workflow_repo.update_status(run.id, tenant_id, "running", current_step=step_index + 1)
 
@@ -534,13 +549,12 @@ class DocumentParseService:
 
         workflow_repo.update_status(run.id, tenant_id, "completed", current_step=len(steps))
 
-        # Extract the final requirement tree from step 4
         hierarchy_record = result.get("04_hierarchy_resolution")
         if hierarchy_record is None or hierarchy_record.output is None:
             raise WorkflowFailedError("04_hierarchy_resolution did not produce output")
 
-        raw_requirements = hierarchy_record.output
-        if not isinstance(raw_requirements, list):
-            raise WorkflowFailedError("04_hierarchy_resolution output is not a list")
+        fc_spec = hierarchy_record.output
+        if not isinstance(fc_spec, dict):
+            raise WorkflowFailedError("04_hierarchy_resolution output is not a dict")
 
-        return raw_requirements
+        return fc_spec

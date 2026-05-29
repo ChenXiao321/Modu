@@ -202,7 +202,7 @@ class AsilVerificationStep(Step):
 
 
 class HierarchyResolutionStep(Step):
-    """Step 4: Resolve parent-child relationships and build the requirement tree."""
+    """Step 4: Build the FC Requirement Specification document."""
 
     def __init__(self, template_dir: Path) -> None:
         super().__init__(
@@ -222,7 +222,7 @@ class HierarchyResolutionStep(Step):
             previous_outputs=context.previous_outputs,
         )
 
-    def parse_output(self, raw: str) -> list[dict]:
+    def parse_output(self, raw: str) -> dict[str, Any]:
         cleaned = _clean_json_response(raw)
         try:
             data = json.loads(cleaned)
@@ -231,15 +231,82 @@ class HierarchyResolutionStep(Step):
                 f"04_hierarchy_resolution: invalid JSON: {exc}", raw_response=raw
             ) from exc
 
-        if not isinstance(data, list):
+        if not isinstance(data, dict):
             raise LLMOutputFormatError(
-                "04_hierarchy_resolution: expected JSON array", raw_response=raw
+                "04_hierarchy_resolution: expected JSON object", raw_response=raw
             )
 
-        return self._normalize_tree(data)
+        return self._normalize_fc_spec(data)
+
+    def _normalize_fc_spec(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Normalize and validate FC requirement specification shape."""
+        result: dict[str, Any] = {
+            "project_number": data.get("project_number"),
+            "author": data.get("author"),
+            "version": data.get("version"),
+            "status": data.get("status"),
+            "purpose": data.get("purpose"),
+            "scope": data.get("scope"),
+            "definitions": self._normalize_definitions(data.get("definitions")),
+            "overview": data.get("overview"),
+            "functional_requirements": self._normalize_functional_requirements(
+                data.get("functional_requirements")
+            ),
+            "non_functional_requirements": self._normalize_non_functional_requirements(
+                data.get("non_functional_requirements")
+            ),
+            "notes": data.get("notes"),
+            "supporting_documents": self._normalize_list_of_strings(
+                data.get("supporting_documents")
+            ),
+        }
+        return result
+
+    def _normalize_definitions(self, defs: Any) -> list[dict]:
+        if not isinstance(defs, list):
+            return []
+        result = []
+        for d in defs:
+            if isinstance(d, dict) and d.get("term") and d.get("definition"):
+                result.append({
+                    "term": str(d["term"]).strip(),
+                    "definition": str(d["definition"]).strip(),
+                })
+        return result
+
+    def _normalize_functional_requirements(self, reqs: Any) -> list[dict]:
+        if not isinstance(reqs, list):
+            return []
+        result = []
+        for cat in reqs:
+            if not isinstance(cat, dict):
+                continue
+            items = self._normalize_tree(cat.get("items") or [])
+            if items:
+                result.append({
+                    "category": str(cat.get("category", "未分类")).strip(),
+                    "items": items,
+                })
+        return result
+
+    def _normalize_non_functional_requirements(self, reqs: Any) -> list[dict]:
+        if not isinstance(reqs, list):
+            return []
+        result = []
+        for r in reqs:
+            if isinstance(r, dict) and r.get("description"):
+                result.append({"description": str(r["description"]).strip()})
+            elif isinstance(r, str):
+                result.append({"description": str(r).strip()})
+        return result
+
+    def _normalize_list_of_strings(self, val: Any) -> list[str]:
+        if not isinstance(val, list):
+            return []
+        return [str(v).strip() for v in val if v]
 
     def _normalize_tree(self, nodes: list[dict]) -> list[dict]:
-        """Recursively normalize tree nodes to standard shape."""
+        """Recursively normalize requirement tree nodes."""
         result = []
         for node in nodes:
             if not isinstance(node, dict):
