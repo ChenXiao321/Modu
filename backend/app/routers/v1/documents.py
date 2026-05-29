@@ -23,6 +23,9 @@ from app.schemas.documents import (
 from app.schemas.requirements import ConfirmFieldRequest
 from app.services.design_document_service import DesignDocumentService
 from app.services.design_review_service import DesignReviewService
+from app.repositories.document_repository import DocumentRepository
+from app.repositories.fc_requirement_repository import FcRequirementRepository
+from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
 from app.services.document_parse_service import DocumentParseService
 from app.services.document_service import DocumentService
 from app.tasks.generate_design_document import schedule_generate_design_document
@@ -309,3 +312,51 @@ def rollback_to_revision(
     svc = DesignReviewService(db)
     result = svc.rollback_to_revision(tenant_id, document_id, revision_id, req.author)
     return _wrap(result)
+
+
+# ---------------------------------------------------------------------------
+# FC Requirement Specification endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/{document_id}/fc-requirement", response_model=StandardResponse)
+def get_fc_requirement(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    doc_repo = DocumentRepository(db)
+    doc = doc_repo.get_by_id(document_id, tenant_id)
+    if doc is None:
+        raise DocumentNotFoundError(document_id)
+    if doc.parse_status != "completed":
+        return _wrap({"status": doc.parse_status or "pending", "fc_spec": None})
+
+    fc_repo = FcRequirementRepository(db)
+    fc_doc = fc_repo.get_by_document(document_id, tenant_id)
+    if fc_doc is None:
+        return _wrap({"status": "not_found", "fc_spec": None})
+
+    return _wrap({"status": "completed", "fc_spec": fc_repo.to_dict(fc_doc)})
+
+
+# ---------------------------------------------------------------------------
+# Software Detailed Design endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/{document_id}/detailed-design", response_model=StandardResponse)
+def get_detailed_design(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    doc_repo = DocumentRepository(db)
+    doc = doc_repo.get_by_id(document_id, tenant_id)
+    if doc is None:
+        raise DocumentNotFoundError(document_id)
+
+    design_repo = SoftwareDetailedDesignRepository(db)
+    design = design_repo.get_by_document(document_id, tenant_id)
+    if design is None:
+        return _wrap({"status": "pending", "design": None})
+
+    return _wrap({"status": design.status, "design": design_repo.to_dict(design)})
