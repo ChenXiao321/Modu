@@ -397,14 +397,16 @@ class DocumentParseService:
                 self.db.add(result)
             self.db.commit()
 
+    _PROTECTED_STATUSES = {"in_design", "design_reviewed", "code_generated"}
+
     def _update_pipeline_block_status(self, tenant_id: int, document_id: str) -> None:
         """Update pipeline status based on low-confidence OCR fields."""
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
         if doc is None:
             return
 
-        # Protect in_design state: once entered design phase, do not revert
-        if doc.pipeline_status == "in_design":
+        # Protect terminal states: once entered design phase or beyond, do not revert
+        if doc.pipeline_status in self._PROTECTED_STATUSES:
             return
 
         # Non-OCR documents are always ready

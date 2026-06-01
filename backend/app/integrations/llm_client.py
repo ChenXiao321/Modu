@@ -198,6 +198,10 @@ class MockLLMClient(LLMClient):
             step_type = "design_fc"
         elif "详细设计" in prompt:
             step_type = "design_detail"
+        elif "module_architecture" in prompt or "模块架构" in prompt or "code_01" in prompt:
+            step_type = "code_module"
+        elif "code_generation" in prompt or "代码生成" in prompt or "code_02" in prompt:
+            step_type = "code_source"
 
         # Derive a deterministic seed from the prompt hash
         seed = int(hashlib.md5(prompt.encode()).hexdigest(), 16)
@@ -272,6 +276,55 @@ class MockLLMClient(LLMClient):
                     "non_functional_requirements": [],
                     "notes": None,
                     "supporting_documents": [],
+                },
+                ensure_ascii=False,
+            )
+        elif step_type == "code_module":
+            return json.dumps(
+                {
+                    "module_name": "MockModule",
+                    "files": [
+                        {
+                            "file_path": "src/MockModule.h",
+                            "file_type": "header",
+                            "description": "模块接口定义头文件",
+                        },
+                        {
+                            "file_path": "src/MockModule.c",
+                            "file_type": "source",
+                            "description": "模块实现源文件",
+                        },
+                    ],
+                    "interfaces": [
+                        {
+                            "name": "MockModule_Init",
+                            "return_type": "void",
+                            "parameters": [],
+                        },
+                        {
+                            "name": "MockModule_Run",
+                            "return_type": "Std_ReturnType",
+                            "parameters": [],
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            )
+        elif step_type == "code_source":
+            return json.dumps(
+                {
+                    "files": [
+                        {
+                            "file_path": "src/MockModule.h",
+                            "file_type": "header",
+                            "content": "/* SPDX-License-Identifier: MIT */\n#ifndef MOCKMODULE_H\n#define MOCKMODULE_H\n\n#include <Std_Types.h>\n\nvoid MockModule_Init(void);\nStd_ReturnType MockModule_Run(void);\n\n#endif /* MOCKMODULE_H */\n",
+                        },
+                        {
+                            "file_path": "src/MockModule.c",
+                            "file_type": "source",
+                            "content": "/* SPDX-License-Identifier: MIT */\n#include \"MockModule.h\"\n\nvoid MockModule_Init(void)\n{\n    /* TODO: implementation */\n}\n\nStd_ReturnType MockModule_Run(void)\n{\n    /* TODO: implementation */\n    return E_OK;\n}\n",
+                        },
+                    ]
                 },
                 ensure_ascii=False,
             )
