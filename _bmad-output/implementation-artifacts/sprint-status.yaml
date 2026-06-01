@@ -55,11 +55,11 @@ development_status:
   2-1-design-document-auto-generation: done
   2-2-design-document-split-screen-review-and-online-correction: done
   2-3-design-verification-gate-and-review-record-locking: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # Epic 3: 合规代码自动生成
-  epic-3: backlog
-  3-1-misra-compliant-code-auto-generation: backlog
+  epic-3: in-progress
+  3-1-misra-compliant-code-auto-generation: ready-for-dev
   3-2-polarion-trace-id-embedding-and-template-consistency: backlog
   3-3-asil-level-adaptive-code-generation: backlog
   epic-3-retrospective: optional

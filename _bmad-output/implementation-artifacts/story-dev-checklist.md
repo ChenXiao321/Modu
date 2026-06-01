@@ -82,6 +82,22 @@
 
 ---
 
+## 6. 状态机扩展（Epic 2 回顾沉淀）
+
+**核心原则**：新增 `pipeline_status`（或任何状态字段）时，必须做"全量 grep 影响分析"，不能只做"点修复"。终态保护必须是集合，不能是单个状态值。
+
+| # | 检查点 | 常见反例 | 正确做法 |
+|---|--------|---------|---------|
+| 6.1 | 新增状态前是否运行了 `grep -rn "pipeline_status" backend/app/` 并逐条审查？ | 只改了 `_update_pipeline_block_status`，漏了 `_assert_not_locked` 和 `confirm_ocr_field` | 新增 checklist，强制审查所有引用点 |
+| 6.2 | 终态保护是否使用集合而非单点硬编码？ | `if status == "in_design": return` | `_PROTECTED_STATUSES = {"in_design", "design_reviewed", "code_generated"}` |
+| 6.3 | 新增终态后，`_assert_not_locked` / `DesignReviewLockedError` 是否需要扩展？ | `code_generated` 下仍可保存修订 | 评审并决定新终态是否也应锁定修改 |
+| 6.4 | Schema 中状态字段是否从 `str` 升级为 `Literal` 枚举？ | `pipeline_status: str` | `pipeline_status: Literal["ready", "blocked", "in_design", "design_reviewed", "code_generated"]` |
+| 6.5 | 状态转换图是否在 PRD 中定义？ | PRD 只写"完成后状态变为 X" | PRD 中画状态图：哪些状态可以转到 X，X 可以转到哪些状态 |
+
+**Story 历史**：Epic 2 `_update_pipeline_block_status` 只保护 `in_design`，漏了 `design_reviewed`；Epic 3 评审发现后修复为集合保护。
+
+---
+
 ## 快速自检表（开发完成时勾选）
 
 ```

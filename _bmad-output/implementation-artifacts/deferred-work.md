@@ -20,13 +20,14 @@
 
 | 优先级 | 触发条件 | 关联 Story | 描述 | 位置 |
 |--------|---------|-----------|------|------|
-| P1 | 新增流水线终态（如 `in_test`） | 1.4 | `_update_pipeline_block_status` 终态硬编码为 `in_design`，新增终态时需扩展 | `document_parse_service.py:336` |
+| ~~P1~~ ✅ | ~~新增流水线终态~~ | 1.4 | ~~`_update_pipeline_block_status` 终态硬编码为 `in_design`~~ → 改为 `_PROTECTED_STATUSES` 集合 | `document_parse_service.py:336` |
 | P1 | 引入真实 LLM/OCR 引擎 | 1.4 | `MockLLMClient` 测试覆盖盲区：固定返回 3 个高置信度字段时，核心解阻塞路径未被覆盖 | `llm_client.py:571` |
 | P2 | 架构统一重构 | 2.2 | `_VALID_SECTION_KEYS` 与 `_REQUIRED_SECTIONS` 硬编码重复，需统一为单一数据源 | `design_review_service.py` |
 | P2 | 前端架构升级 | 2.2 | 缺少 Error Boundary / 按章节错误隔离 | 前端全局 |
 | P2 | Auth 模块实现 | 2.1, 2.2 | `author` 字段为自由文本无格式校验，Auth 实现后统一替换为 `CurrentUser` | 多文件 |
 | P2 | 前端 TypeScript 严格化 | 2.1 | 前端 `DesignDocument.status` 类型为 `string` 而非字面量联合 | `types.ts:1458-1469` |
 | P2 | 数据模型增强 | 2.2 | `DesignRevision` 缺少 `reason`/`change_description` 字段 | `models/design_revision.py` |
+| P2 | 状态机扩展评估 | 3.1 | `_assert_not_locked` 仅检查 `design_reviewed`，未覆盖 `code_generated` — 需评审代码生成后是否应锁定设计修改 | `design_review_service.py:105` |
 | P2 | 验证需求 | 2.1 | `TimestampMixin` 的 `onupdate` 行为未在 diff 中验证 | `models/design_document.py` |
 
 ---
