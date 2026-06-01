@@ -1,0 +1,21 @@
+{
+  "fc_list": [
+    {
+      "fc_id": "FC-001",
+      "fc_name": "Watchdog Manager",
+      "description": "负责系统看门狗监控与超时处理",
+      "asil_level": "D",
+      "assigned_requirements": ["SW-REQ-001", "SW-REQ-002"],
+      "interface_summary": "提供初始化、喂狗、超时回调接口"
+    },
+    {
+      "fc_id": "FC-002",
+      "fc_name": "Voltage Monitor",
+      "description": "负责电源电压监测与异常上报",
+      "asil_level": "B",
+      "assigned_requirements": ["SW-REQ-003"],
+      "interface_summary": "提供电压读取、阈值配置、异常通知接口"
+    }
+  ],
+  "allocation_rationale": "ASIL-D 需求分配到独立 FC 以确保最高安全等级隔离；ASIL-B 需求分配到独立监控 FC。"
+}

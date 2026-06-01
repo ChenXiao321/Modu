@@ -1,24 +1,29 @@
 from pydantic import BaseModel, Field
 
 
+_MAX_REVISED_CONTENT_LEN = 50_000
+_MAX_COMMENT_TEXT_LEN = 10_000
+_MAX_AUTHOR_LEN = 100
+
+
 class SaveRevisionRequest(BaseModel):
     section_key: str
-    revised_content: str = Field(min_length=1)
-    author: str = Field(min_length=1)
+    revised_content: str = Field(min_length=1, max_length=_MAX_REVISED_CONTENT_LEN)
+    author: str = Field(min_length=1, max_length=_MAX_AUTHOR_LEN)
 
 
 class ReviewCommentRequest(BaseModel):
     section_key: str
-    comment_text: str = Field(min_length=1)
-    author: str = Field(min_length=1)
+    comment_text: str = Field(min_length=1, max_length=_MAX_COMMENT_TEXT_LEN)
+    author: str = Field(min_length=1, max_length=_MAX_AUTHOR_LEN)
 
 
 class ResolveCommentRequest(BaseModel):
-    resolved_by: str = Field(min_length=1)
+    resolved_by: str = Field(min_length=1, max_length=_MAX_AUTHOR_LEN)
 
 
 class RollbackRevisionRequest(BaseModel):
-    author: str = Field(min_length=1)
+    author: str = Field(min_length=1, max_length=_MAX_AUTHOR_LEN)
 
 
 class DesignDocumentData(BaseModel):

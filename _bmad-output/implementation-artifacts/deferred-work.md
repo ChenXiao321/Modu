@@ -35,7 +35,7 @@
 
 | 优先级 | 触发条件 | 关联 Story | 描述 | 位置 |
 |--------|---------|-----------|------|------|
-| P1 | 单文档 > 50 页或字段 > 1000 条 | 1.4 | `_persist_ocr_results` 超大事务风险：全量字段一次 commit | `document_parse_service.py:291` |
+| ~~P1~~ ✅ | ~~单文档 > 50 页或字段 > 1000 条~~ | 1.4 | ~~`_persist_ocr_results` 超大事务风险：全量字段一次 commit~~ → 改批量 commit（`_OCR_BATCH_SIZE=100`） | `document_parse_service.py:291` |
 | P1 | 大文档分屏审查卡顿 | 2.2 | 前端大数组未做懒加载/分页（requirements、safetyParameters） | `DesignReviewPage.tsx` |
 | P2 | 数据库性能调优迭代 | 2.2 | 缺少 `(document_id, section_key)` 复合索引 | Alembic 迁移 |
 | P2 | 性能调优迭代 | 2.2 | `get_review_context` 一次性加载全量评论/需求/安全参数，大文档时负载风险 | `design_review_service.py:49` |
@@ -48,7 +48,7 @@
 
 | 优先级 | 触发条件 | 关联 Story | 描述 | 位置 |
 |--------|---------|-----------|------|------|
-| P1 | 安全审计 / 渗透测试 | 2.2 | 无输入长度上限（`revised_content`、`comment_text` 可超大） | `schemas/design_review.py` |
+| ~~P1~~ ✅ | ~~安全审计 / 渗透测试~~ | 2.2 | ~~无输入长度上限~~ → 添加 `max_length`（`revised_content`=50K, `comment_text`=10K, `author`=100） | `schemas/design_review.py` |
 | P2 | 安全加固迭代 | 1.4 | reviewerName 输入框无前端最大长度限制 | `RequirementViewerPage.tsx:1798` |
 | P2 | Pydantic 统一加固 | 2.2 | Pydantic schema 缺少 `max_length` 限制 | 全局 schema |
 | P2 | 安全加固迭代 | 2.1 | `document_id` URL 参数无 UUID 格式校验 | `routers/v1/documents.py:290-311` |
@@ -60,7 +60,7 @@
 
 | 优先级 | 触发条件 | 关联 Story | 描述 | 位置 |
 |--------|---------|-----------|------|------|
-| P1 | 高并发场景验证 | 2.2 | 缺少并发竞争场景的集成测试（并行保存修订、重复提交审查等） | `tests/integration` |
+| ~~P1~~ ✅ | ~~高并发场景验证~~ | 2.2 | ~~缺少并发竞争场景的集成测试~~ → 新增 3 个竞态测试（重复提交、修订链一致性、重复 resolve） | `tests/integration/test_design_review_router.py` |
 | P2 | SQLAlchemy 会话重构 | 1.4 | `update_review_status_atomic` 会话同步隐患 | `ocr_result_repository.py:147` |
 | P2 | 高并发场景验证 | 2.2 | `submit_design_review` 幂等性未处理（缺少幂等键） | `design_review_service.py` |
 

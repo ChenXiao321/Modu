@@ -6,6 +6,7 @@ from app.exceptions import (
     CommentNotFoundError,
     DesignDocumentNotFoundError,
     DesignDocumentNotReadyError,
+    DesignReviewLockedError,
     DocumentNotFoundError,
     InvalidSectionKeyError,
     PendingCommentsExistError,
@@ -17,7 +18,9 @@ from app.models.design_document import DesignDocument
 from app.models.document import Document
 from app.models.parsed_requirement import ParsedRequirement
 from app.models.review_comment import ReviewComment
+from app.models.software_detailed_design import SoftwareDetailedDesign
 from app.repositories.review_comment_repository import ReviewCommentRepository
+from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
 from app.services.design_review_service import DesignReviewService
 
 
@@ -151,6 +154,14 @@ class TestSaveRevision(TestDesignReviewServiceBase):
         with pytest.raises(DesignDocumentNotReadyError):
             svc.save_revision(1, doc.id, "overview", "content", "张三")
 
+    def test_save_revision_locked(self, db_session):
+        doc = self._create_doc(db_session, pipeline_status="design_reviewed")
+        self._create_design(db_session, doc)
+
+        svc = DesignReviewService(db_session)
+        with pytest.raises(DesignReviewLockedError):
+            svc.save_revision(1, doc.id, "overview", "New content", "张三")
+
 
 class TestGetRevisionHistory(TestDesignReviewServiceBase):
     def test_get_revision_history_with_diff(self, db_session):
@@ -197,6 +208,14 @@ class TestAddReviewComment(TestDesignReviewServiceBase):
         with pytest.raises(InvalidSectionKeyError):
             svc.add_review_comment(1, doc.id, "bad", "text", "张三")
 
+    def test_add_review_comment_locked(self, db_session):
+        doc = self._create_doc(db_session, pipeline_status="design_reviewed")
+        self._create_design(db_session, doc)
+
+        svc = DesignReviewService(db_session)
+        with pytest.raises(DesignReviewLockedError):
+            svc.add_review_comment(1, doc.id, "overview", "建议补充", "张三")
+
 
 class TestResolveReviewComment(TestDesignReviewServiceBase):
     def test_resolve_success(self, db_session):
@@ -227,6 +246,25 @@ class TestResolveReviewComment(TestDesignReviewServiceBase):
         svc = DesignReviewService(db_session)
         with pytest.raises(CommentNotFoundError):
             svc.resolve_review_comment(1, doc.id, "nonexistent", "李四")
+
+    def test_resolve_locked(self, db_session):
+        doc = self._create_doc(db_session, pipeline_status="design_reviewed")
+        design = self._create_design(db_session, doc)
+
+        comment = ReviewComment(
+            tenant_id=1,
+            design_document_id=design.id,
+            document_id=doc.id,
+            section_key="overview",
+            author="张三",
+            comment_text="建议补充",
+        )
+        db_session.add(comment)
+        db_session.commit()
+
+        svc = DesignReviewService(db_session)
+        with pytest.raises(DesignReviewLockedError):
+            svc.resolve_review_comment(1, doc.id, comment.id, "李四")
 
 
 class TestSubmitDesignReview(TestDesignReviewServiceBase):
@@ -273,6 +311,25 @@ class TestSubmitDesignReview(TestDesignReviewServiceBase):
         with pytest.raises(DocumentNotFoundError):
             svc.submit_design_review(1, "nonexistent-id")
 
+    def test_submit_updates_sdd_status(self, db_session):
+        doc = self._create_doc(db_session, pipeline_status="in_design")
+        self._create_design(db_session, doc)
+
+        sdd = SoftwareDetailedDesign(
+            tenant_id=1,
+            document_id=doc.id,
+            status="completed",
+        )
+        db_session.add(sdd)
+        db_session.commit()
+
+        svc = DesignReviewService(db_session)
+        result = svc.submit_design_review(1, doc.id)
+
+        assert result["pipeline_status"] == "design_reviewed"
+        db_session.refresh(sdd)
+        assert sdd.status == "reviewed"
+
 
 class TestRollbackToRevision(TestDesignReviewServiceBase):
     def test_rollback_success(self, db_session):
@@ -299,4 +356,12 @@ class TestRollbackToRevision(TestDesignReviewServiceBase):
 
         svc = DesignReviewService(db_session)
         with pytest.raises(RevisionNotFoundError):
+            svc.rollback_to_revision(1, doc.id, "nonexistent", "张三")
+
+    def test_rollback_locked(self, db_session):
+        doc = self._create_doc(db_session, pipeline_status="design_reviewed")
+        design = self._create_design(db_session, doc)
+
+        svc = DesignReviewService(db_session)
+        with pytest.raises(DesignReviewLockedError):
             svc.rollback_to_revision(1, doc.id, "nonexistent", "张三")

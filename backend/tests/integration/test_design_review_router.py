@@ -363,3 +363,75 @@ class TestDesignReviewRouter:
         )
         assert res.status_code == 404
         assert "REVISION_NOT_FOUND" in res.json()["error"]["code"]
+
+    # ------------------------------------------------------------------
+    # Race-condition / concurrency scenarios
+    # ------------------------------------------------------------------
+    def test_rapid_double_submit_blocked(self, client, test_db):
+        """Two rapid sequential submits: second must be rejected."""
+        doc, design = self._seed_doc_and_design(test_db, pipeline_status="in_design")
+        r1 = client.post(
+            f"/api/v1/documents/{doc.id}/design-review/submit",
+            headers={"X-Tenant-ID": "1"},
+        )
+        assert r1.status_code == 200
+        assert r1.json()["data"]["pipeline_status"] == "design_reviewed"
+
+        r2 = client.post(
+            f"/api/v1/documents/{doc.id}/design-review/submit",
+            headers={"X-Tenant-ID": "1"},
+        )
+        assert r2.status_code == 409
+        err_code = r2.json()["error"]["code"]
+        assert err_code in ("PIPELINE_STATUS_INVALID", "DESIGN_REVIEW_LOCKED")
+
+    def test_rapid_revision_chain_consistency(self, client, test_db):
+        """Rapid sequential saves must produce a correct original_content chain."""
+        doc, design = self._seed_doc_and_design(test_db)
+        for content in ["Rev A", "Rev B", "Rev C"]:
+            res = client.post(
+                f"/api/v1/documents/{doc.id}/design-revisions",
+                json={"section_key": "overview", "revised_content": content, "author": "张三"},
+                headers={"X-Tenant-ID": "1"},
+            )
+            assert res.status_code == 200
+
+        res = client.get(
+            f"/api/v1/documents/{doc.id}/design-revisions?section_key=overview",
+            headers={"X-Tenant-ID": "1"},
+        )
+        assert res.status_code == 200
+        revisions = res.json()["data"]["revisions"]
+        assert len(revisions) == 3
+        # newest first
+        assert revisions[0]["original_content"] == "Rev B"
+        assert revisions[0]["revised_content"] == "Rev C"
+        assert revisions[1]["original_content"] == "Rev A"
+        assert revisions[1]["revised_content"] == "Rev B"
+        assert revisions[2]["original_content"] == "Original overview"
+        assert revisions[2]["revised_content"] == "Rev A"
+
+    def test_resolve_already_resolved_comment_blocked(self, client, test_db):
+        """Resolving an already-resolved comment must be rejected."""
+        doc, design = self._seed_doc_and_design(test_db)
+        create_res = client.post(
+            f"/api/v1/documents/{doc.id}/review-comments",
+            json={"section_key": "overview", "comment_text": "建议", "author": "张三"},
+            headers={"X-Tenant-ID": "1"},
+        )
+        comment_id = create_res.json()["data"]["id"]
+
+        r1 = client.patch(
+            f"/api/v1/documents/{doc.id}/review-comments/{comment_id}/resolve",
+            json={"resolved_by": "李四"},
+            headers={"X-Tenant-ID": "1"},
+        )
+        assert r1.status_code == 200
+
+        r2 = client.patch(
+            f"/api/v1/documents/{doc.id}/review-comments/{comment_id}/resolve",
+            json={"resolved_by": "王五"},
+            headers={"X-Tenant-ID": "1"},
+        )
+        assert r2.status_code == 409
+        assert r2.json()["error"]["code"] == "COMMENT_ALREADY_RESOLVED"

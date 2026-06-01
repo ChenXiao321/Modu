@@ -162,6 +162,124 @@ class MockLLMClient(LLMClient):
         assert isinstance(result, dict)
         return result
 
+    def _call(self, messages: list[dict], temperature: float | None = None) -> str:
+        """Generic LLM call for Agent workflow steps.
+
+        Identifies the step type from the prompt content and returns
+        a mock JSON response rendered from the appropriate template.
+        """
+        prompt = ""
+        for msg in messages:
+            if msg.get("role") == "user":
+                prompt = msg.get("content", "")
+                break
+        if not prompt:
+            prompt = messages[-1].get("content", "") if messages else ""
+
+        # Determine step type from prompt content markers.
+        # For design steps, previous_outputs are rendered inline so variable
+        # names disappear. We use output-schema keywords instead:
+        # - design_02 template asks for fc_architecture (not present in design_01)
+        # - design_01 template asks for fc_list (not present in design_02 template)
+        step_type = "unknown"
+        if "fc_architecture" in prompt:
+            step_type = "design_detail"
+        elif "fc_list" in prompt:
+            step_type = "design_fc"
+        elif "01_structure_analysis" in prompt or "文档结构" in prompt:
+            step_type = "structure"
+        elif "02_requirement_extraction" in prompt or "需求提取" in prompt:
+            step_type = "extract"
+        elif "03_asil_verification" in prompt or "ASIL" in prompt:
+            step_type = "asil"
+        elif "04_hierarchy_resolution" in prompt or "FC 需求规范" in prompt:
+            step_type = "hierarchy"
+        elif "FC 识别" in prompt:
+            step_type = "design_fc"
+        elif "详细设计" in prompt:
+            step_type = "design_detail"
+
+        # Derive a deterministic seed from the prompt hash
+        seed = int(hashlib.md5(prompt.encode()).hexdigest(), 16)
+
+        if step_type == "design_fc":
+            result = self._render_json("agent_design_fc_mock.j2", seed=seed)
+            assert isinstance(result, dict)
+            return json.dumps(result, ensure_ascii=False)
+        elif step_type == "design_detail":
+            result = self._render_json("agent_design_detail_mock.j2", seed=seed)
+            assert isinstance(result, dict)
+            return json.dumps(result, ensure_ascii=False)
+        elif step_type == "structure":
+            return json.dumps(
+                {
+                    "chapters": [{"id": "1", "title": "概述"}, {"id": "2", "title": "功能需求"}],
+                    "key_terms": [{"term": "WdgM", "definition": "Watchdog Manager"}],
+                    "document_type": "chip_manual",
+                },
+                ensure_ascii=False,
+            )
+        elif step_type == "extract":
+            return json.dumps(
+                [
+                    {
+                        "requirement_id": "SW-REQ-001",
+                        "description": "系统应实现看门狗监控功能",
+                        "chapter": "2.1",
+                        "asil_level": "D",
+                    }
+                ],
+                ensure_ascii=False,
+            )
+        elif step_type == "asil":
+            return json.dumps(
+                {
+                    "requirements": [
+                        {
+                            "requirement_id": "SW-REQ-001",
+                            "description": "系统应实现看门狗监控功能",
+                            "asil_level": "D",
+                        }
+                    ],
+                    "inconsistencies": [],
+                },
+                ensure_ascii=False,
+            )
+        elif step_type == "hierarchy":
+            return json.dumps(
+                {
+                    "project_number": "PRJ-MODU-001",
+                    "author": "Mock",
+                    "version": "1.0",
+                    "status": "draft",
+                    "purpose": "定义模块功能需求",
+                    "scope": "芯片手册功能需求",
+                    "definitions": [],
+                    "overview": "本文档定义模块功能需求",
+                    "functional_requirements": [
+                        {
+                            "category": "功能需求",
+                            "items": [
+                                {
+                                    "requirement_id": "SW-REQ-001",
+                                    "description": "系统应实现看门狗监控功能",
+                                    "asil_level": "D",
+                                    "children": [],
+                                }
+                            ],
+                        }
+                    ],
+                    "non_functional_requirements": [],
+                    "notes": None,
+                    "supporting_documents": [],
+                },
+                ensure_ascii=False,
+            )
+        else:
+            # Fallback: return empty JSON object
+            logger.warning("MockLLMClient._call: unrecognized step type, returning empty object")
+            return "{}"
+
 
 class LiteLLMClient(LLMClient):
     """

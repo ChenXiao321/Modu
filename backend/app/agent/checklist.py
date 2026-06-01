@@ -220,6 +220,164 @@ class BuiltInRules:
             violations.extend(cls.validate_asil_level(asil))
         return violations
 
+    @classmethod
+    def validate_fc_identification(cls, output: dict) -> list[Violation]:
+        """Validate FC identification step output."""
+        violations: list[Violation] = []
+        fc_list = output.get("fc_list")
+        if not isinstance(fc_list, list) or not fc_list:
+            violations.append(
+                Violation(
+                    rule_id="BUILTIN-011",
+                    severity="error",
+                    message="fc_list is missing or empty.",
+                    suggestion="At least one Functional Component (FC) must be identified.",
+                )
+            )
+            return violations
+
+        seen_fc_ids: set[str] = set()
+        for idx, fc in enumerate(fc_list):
+            if not isinstance(fc, dict):
+                violations.append(
+                    Violation(
+                        rule_id="BUILTIN-012",
+                        severity="error",
+                        message=f"fc_list[{idx}] is not a dict.",
+                        suggestion="Each FC must be a JSON object.",
+                    )
+                )
+                continue
+            fc_id = fc.get("fc_id")
+            if not fc_id:
+                violations.append(
+                    Violation(
+                        rule_id="BUILTIN-013",
+                        severity="error",
+                        message=f"fc_list[{idx}] missing fc_id.",
+                        suggestion="Every FC must have a unique fc_id (e.g., FC-001).",
+                    )
+                )
+            else:
+                if fc_id in seen_fc_ids:
+                    violations.append(
+                        Violation(
+                            rule_id="BUILTIN-014",
+                            severity="error",
+                            message=f"Duplicate fc_id: {fc_id}.",
+                            suggestion="Ensure every FC ID is unique.",
+                        )
+                    )
+                seen_fc_ids.add(fc_id)
+                if not re.match(r"^FC-\d+$", str(fc_id)):
+                    violations.append(
+                        Violation(
+                            rule_id="BUILTIN-015",
+                            severity="warning",
+                            message=f"fc_id format warning: {fc_id}. Expected format: FC-NNN.",
+                            suggestion="Use FC- followed by digits (e.g., FC-001).",
+                        )
+                    )
+
+            if not fc.get("fc_name"):
+                violations.append(
+                    Violation(
+                        rule_id="BUILTIN-016",
+                        severity="error",
+                        message=f"FC {fc_id or idx} missing fc_name.",
+                        suggestion="Every FC must have a name.",
+                    )
+                )
+            if not fc.get("description"):
+                violations.append(
+                    Violation(
+                        rule_id="BUILTIN-017",
+                        severity="error",
+                        message=f"FC {fc_id or idx} missing description.",
+                        suggestion="Every FC must have a description.",
+                    )
+                )
+
+            asil = fc.get("asil_level")
+            violations.extend(cls.validate_asil_level(asil))
+
+            assigned = fc.get("assigned_requirements")
+            if not isinstance(assigned, list) or not assigned:
+                violations.append(
+                    Violation(
+                        rule_id="BUILTIN-018",
+                        severity="warning",
+                        message=f"FC {fc_id or idx} has no assigned_requirements.",
+                        suggestion="Each FC should be assigned at least one requirement.",
+                    )
+                )
+
+        return violations
+
+    @classmethod
+    def validate_detailed_design(cls, output: dict) -> list[Violation]:
+        """Validate detailed design step output."""
+        violations: list[Violation] = []
+
+        if not output.get("project_number"):
+            violations.append(
+                Violation(
+                    rule_id="BUILTIN-019",
+                    severity="warning",
+                    message="project_number is missing.",
+                    suggestion="Include a project number for traceability.",
+                )
+            )
+
+        fc_architecture = output.get("fc_architecture")
+        if not isinstance(fc_architecture, dict):
+            violations.append(
+                Violation(
+                    rule_id="BUILTIN-020",
+                    severity="error",
+                    message="fc_architecture is missing or not a dict.",
+                    suggestion="fc_architecture must be a JSON object describing the FC modules.",
+                )
+            )
+        else:
+            fc_modules = fc_architecture.get("fc_modules")
+            if not isinstance(fc_modules, list) or not fc_modules:
+                violations.append(
+                    Violation(
+                        rule_id="BUILTIN-021",
+                        severity="error",
+                        message="fc_architecture.fc_modules is missing or empty.",
+                        suggestion="At least one FC module must be defined.",
+                    )
+                )
+
+        detailed_design = output.get("detailed_design")
+        if not isinstance(detailed_design, list) or not detailed_design:
+            violations.append(
+                Violation(
+                    rule_id="BUILTIN-022",
+                    severity="error",
+                    message="detailed_design is missing or empty.",
+                    suggestion="At least one FC must have detailed design entries.",
+                )
+            )
+
+        safety_design = output.get("safety_design")
+        if isinstance(safety_design, dict):
+            redundancy = safety_design.get("redundancy_measures")
+            fault = safety_design.get("fault_handling")
+            if not redundancy or not fault:
+                violations.append(
+                    Violation(
+                        rule_id="BUILTIN-023",
+                        severity="warning",
+                        message="safety_design missing redundancy_measures or fault_handling.",
+                        suggestion="ASIL-C/D modules must include redundancy and fault handling.",
+                    )
+                )
+
+        return violations
+
 
 class ChecklistValidator:
     """Merge user-provided checklists with built-in rules and validate step outputs."""
@@ -248,6 +406,12 @@ class ChecklistValidator:
         elif step_name == "04_hierarchy_resolution":
             if isinstance(output, list):
                 violations.extend(BuiltInRules.validate_requirement_tree(output))
+        elif step_name == "design_01_fc_identification":
+            if isinstance(output, dict):
+                violations.extend(BuiltInRules.validate_fc_identification(output))
+        elif step_name == "design_02_detailed_design":
+            if isinstance(output, dict):
+                violations.extend(BuiltInRules.validate_detailed_design(output))
 
         # Apply user-defined rules (placeholder for future expansion)
         for rule in self.user_rules:

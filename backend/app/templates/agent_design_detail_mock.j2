@@ -1,0 +1,88 @@
+{
+  "project_number": "PRJ-MODU-001",
+  "document_version": "1.0",
+  "status": "draft",
+  "overview": "本文档描述基于芯片手册的软件模块详细设计。模块采用分层架构，包含 Watchdog Manager 和 Voltage Monitor 两个功能组件。",
+  "fc_architecture": {
+    "description": "模块包含两个 FC：Watchdog Manager（ASIL-D）和 Voltage Monitor（ASIL-B）。",
+    "fc_modules": [
+      {
+        "fc_id": "FC-001",
+        "fc_name": "Watchdog Manager",
+        "description": "负责系统看门狗监控与超时处理",
+        "asil_level": "D",
+        "external_interfaces": [
+          {
+            "function_name": "WdgM_Init",
+            "parameters": [{"name": "ConfigPtr", "type": "const WdgM_ConfigType*", "description": "配置指针"}],
+            "return_type": "void",
+            "description": "初始化看门狗管理器"
+          }
+        ],
+        "internal_interfaces": [
+          {
+            "function_name": "WdgM_CheckTimeout",
+            "parameters": [],
+            "return_type": "Std_ReturnType",
+            "description": "内部超时检查"
+          }
+        ],
+        "state_machine": "INIT -> RUNNING -> SAFE_STATE",
+        "call_relationships": ["FC-002"]
+      },
+      {
+        "fc_id": "FC-002",
+        "fc_name": "Voltage Monitor",
+        "description": "负责电源电压监测与异常上报",
+        "asil_level": "B",
+        "external_interfaces": [
+          {
+            "function_name": "Vm_ReadVoltage",
+            "parameters": [{"name": "Channel", "type": "uint8", "description": "电压通道"}],
+            "return_type": "uint16",
+            "description": "读取电压值"
+          }
+        ],
+        "internal_interfaces": [],
+        "state_machine": "INIT -> RUNNING",
+        "call_relationships": []
+      }
+    ],
+    "call_graph": "WdgM 在超时检测异常时可能通知 Voltage Monitor 记录异常电压。"
+  },
+  "detailed_design": [
+    {
+      "fc_id": "FC-001",
+      "functions": [
+        {
+          "function_name": "WdgM_Init",
+          "purpose": "初始化看门狗管理器",
+          "algorithm": "1. 校验 ConfigPtr 非空。2. 加载超时阈值。3. 启动硬件看门狗。4. 设置状态为 RUNNING。",
+          "data_structures": [{"name": "WdgM_ConfigType", "type": "struct", "description": "看门狗配置结构体"}],
+          "cyclomatic_complexity": "3"
+        }
+      ]
+    },
+    {
+      "fc_id": "FC-002",
+      "functions": [
+        {
+          "function_name": "Vm_ReadVoltage",
+          "purpose": "读取指定通道电压值",
+          "algorithm": "1. 校验 Channel 范围。2. 读取 ADC 寄存器。3. 转换为毫伏。4. 返回结果。",
+          "data_structures": [{"name": "Vm_ChannelConfig", "type": "struct", "description": "通道配置"}],
+          "cyclomatic_complexity": "2"
+        }
+      ]
+    }
+  ],
+  "safety_design": {
+    "redundancy_measures": "看门狗超时检测采用双通道冗余机制",
+    "fault_handling": "检测到超时后进入 SAFE_STATE 并触发复位",
+    "fmea_reference": "FMEA-WDG-001"
+  },
+  "verification_strategy": {
+    "unit_test_coverage_target": "语句覆盖率 ≥ 90%，分支覆盖率 ≥ 80%",
+    "review_checklist_reference": "G-B035-002"
+  }
+}

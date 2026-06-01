@@ -2,10 +2,11 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.exceptions import DocumentNotFoundError, DocumentNotReadyError, PipelineBlockedError
+from app.exceptions import DesignReviewLockedError, DocumentNotFoundError, DocumentNotReadyError, PipelineBlockedError
 from app.models.base import Base
 from app.models.design_document import DesignDocument
 from app.models.document import Document
+from app.models.fc_requirement_document import FcRequirementDocument
 from app.models.parsed_requirement import ParsedRequirement
 from app.models.safety_critical_parameter import SafetyCriticalParameter
 from app.repositories.design_document_repository import DesignDocumentRepository
@@ -98,6 +99,25 @@ class TestTriggerGenerate:
             svc.trigger_generate(1, doc.id)
         assert "解析失败" in str(exc_info.value)
 
+    def test_trigger_generate_design_reviewed_locked(self, db_session):
+        doc = Document(
+            tenant_id=1,
+            original_filename="test.pdf",
+            file_type="application/pdf",
+            file_size_bytes=100,
+            upload_status="completed",
+            parse_status="completed",
+            pipeline_status="design_reviewed",
+            total_chunks=1,
+            uploaded_chunks="[0]",
+        )
+        db_session.add(doc)
+        db_session.commit()
+
+        svc = DesignDocumentService(db_session)
+        with pytest.raises(DesignReviewLockedError):
+            svc.trigger_generate(1, doc.id)
+
     def test_trigger_generate_pipeline_blocked(self, db_session):
         doc = Document(
             tenant_id=1,
@@ -164,16 +184,16 @@ class TestExecuteGenerate:
         db_session.add(doc)
         db_session.commit()
 
-        # Seed requirements with ASIL level
-        req = ParsedRequirement(
+        # Seed FC requirement specification (required by Agent workflow)
+        fc_doc = FcRequirementDocument(
             tenant_id=1,
             document_id=doc.id,
-            requirement_id="SW-REQ-001",
-            description="System shall monitor voltage.",
-            chapter="3.1",
-            asil_level="C",
+            project_number="PRJ-001",
+            version="1.0",
+            status="draft",
+            functional_requirements='[{"category": "功能需求", "items": [{"requirement_id": "SW-REQ-001", "description": "System shall monitor voltage.", "asil_level": "C", "children": []}]}]',
         )
-        db_session.add(req)
+        db_session.add(fc_doc)
         db_session.commit()
 
         design = DesignDocument(
@@ -192,7 +212,7 @@ class TestExecuteGenerate:
         db_session.refresh(doc)
 
         assert design.status == "completed"
-        assert design.asil_level == "C"
+        assert design.asil_level == "D"  # Mock returns ASIL-D from agent_design_fc_mock
         assert design.sections is not None
         assert "overview" in design.sections
         assert "polarion_trace_id" in design.sections["overview"]
@@ -334,34 +354,25 @@ class TestGetDesignDocument:
             svc.get_design_document(1, "nonexistent-id")
 
 
-class TestResolveAsilLevel:
-    def test_resolve_asil_level_from_requirements(self, db_session):
+class TestResolveAsilFromDesign:
+    def test_resolve_asil_from_design(self, db_session):
         svc = DesignDocumentService(db_session)
-        requirements = [
-            {
-                "requirement_id": "R1",
-                "description": "Desc",
-                "asil_level": "A",
-                "children": [
-                    {
-                        "requirement_id": "R1-1",
-                        "description": "Child",
-                        "asil_level": "D",
-                        "children": [],
-                    }
-                ],
+        design_data = {
+            "fc_architecture": {
+                "fc_modules": [
+                    {"fc_id": "FC-001", "asil_level": "A"},
+                    {"fc_id": "FC-002", "asil_level": "D"},
+                ]
             }
-        ]
-        assert svc._resolve_asil_level(requirements) == "D"
+        }
+        assert svc._resolve_asil_from_design(design_data) == "D"
 
-    def test_resolve_asil_level_defaults_to_none(self, db_session):
+    def test_resolve_asil_from_design_defaults_to_qm(self, db_session):
         svc = DesignDocumentService(db_session)
-        requirements = [
-            {
-                "requirement_id": "R1",
-                "description": "Desc",
-                "asil_level": None,
-                "children": [],
-            }
-        ]
-        assert svc._resolve_asil_level(requirements) is None
+        design_data = {"fc_architecture": {"fc_modules": []}}
+        assert svc._resolve_asil_from_design(design_data) == "QM"
+
+    def test_resolve_asil_from_design_no_level(self, db_session):
+        svc = DesignDocumentService(db_session)
+        design_data = {"fc_architecture": {"fc_modules": [{"fc_id": "FC-001"}]}}
+        assert svc._resolve_asil_from_design(design_data) == "QM"

@@ -1,22 +1,29 @@
+import json
 import logging
 import uuid
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import List
 
 from sqlalchemy.orm import Session
 
+from app.agent.steps import build_design_steps
+from app.agent.workflow import AgentWorkflowEngine, WorkflowContext, WorkflowFailedError
+from app.config import settings
 from app.exceptions import (
+    DesignReviewLockedError,
     DocumentNotFoundError,
     DocumentNotReadyError,
     PipelineBlockedError,
 )
-from app.config import settings
 from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
 from app.models.design_document import DesignDocument
 from app.repositories.design_document_repository import DesignDocumentRepository
 from app.repositories.document_repository import DocumentRepository
+from app.repositories.fc_requirement_repository import FcRequirementRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.safety_parameter_repository import SafetyParameterRepository
+from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +39,8 @@ class DesignDocumentService:
         self.design_repo = DesignDocumentRepository(db)
         self.req_repo = RequirementRepository(db)
         self.safety_repo = SafetyParameterRepository(db)
+        self.fc_repo = FcRequirementRepository(db)
+        self.sdd_repo = SoftwareDetailedDesignRepository(db)
         if llm_client is not None:
             self.llm_client: LLMClient = llm_client
         elif settings.llm_provider == "litellm":
@@ -57,6 +66,8 @@ class DesignDocumentService:
             raise PipelineBlockedError(
                 document_id, doc.block_reason or "流水线存在阻塞项未解除"
             )
+        if doc.pipeline_status == "design_reviewed":
+            raise DesignReviewLockedError(document_id)
 
         existing = (
             self.db.query(DesignDocument)
@@ -90,6 +101,16 @@ class DesignDocumentService:
             self.db.commit()
             self.db.refresh(design_doc)
 
+        # Ensure SoftwareDetailedDesign record exists for Agent workflow output
+        sdd = self.sdd_repo.get_by_document(document_id, tenant_id)
+        if sdd is not None:
+            self.sdd_repo.delete_by_document(document_id, tenant_id)
+        self.sdd_repo.create(
+            tenant_id=tenant_id,
+            document_id=document_id,
+            design_task_id=design_task_id,
+        )
+
         return {
             "document_id": document_id,
             "design_task_id": design_task_id,
@@ -97,7 +118,7 @@ class DesignDocumentService:
         }
 
     def execute_generate(self, tenant_id: int, document_id: str) -> None:
-        """Synchronous design document generation. Intended to be run in background."""
+        """Synchronous design document generation via Agent workflow."""
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
         if doc is None:
             logger.warning("Design generation aborted: document %s not found", document_id)
@@ -108,78 +129,47 @@ class DesignDocumentService:
                 document_id,
                 doc.parse_status,
             )
-            self.design_repo.update_status(
-                document_id, tenant_id, "failed", error_message="文档解析尚未完成"
-            )
+            self._mark_failed(document_id, tenant_id, "文档解析尚未完成")
             return
         if doc.pipeline_status == "blocked":
             logger.warning(
                 "Design generation aborted: document %s pipeline blocked", document_id
             )
-            self.design_repo.update_status(
-                document_id,
-                tenant_id,
-                "failed",
-                error_message=f"流水线阻塞: {doc.block_reason}",
+            self._mark_failed(
+                document_id, tenant_id, f"流水线阻塞: {doc.block_reason}"
             )
             return
 
         try:
-            requirements = self._build_requirements_list(
-                self.req_repo.get_roots_by_document(document_id, tenant_id)
-            )
-            safety_parameters = self.safety_repo.get_by_document(document_id, tenant_id)
-            safety_params_list = [
-                {
-                    "parameter_id": p.parameter_id,
-                    "name": p.name,
-                    "value": p.value,
-                    "unit": p.unit,
-                    "tolerance": p.tolerance,
-                    "chapter": p.chapter,
-                }
-                for p in safety_parameters
-            ]
+            # Load FC requirement specification as input to design agent
+            fc_doc = self.fc_repo.get_by_document(document_id, tenant_id)
+            if fc_doc is None:
+                raise ValueError("FC 需求规范不存在，无法生成设计文档")
+            fc_spec = self.fc_repo.to_dict(fc_doc)
+            fc_text = json.dumps(fc_spec, ensure_ascii=False, indent=2)
 
-            asil_level = self._resolve_asil_level(requirements)
-            if asil_level is None:
-                asil_level = "QM"
-
-            sections = self.llm_client.generate_design_document(
-                requirements=requirements,
-                safety_parameters=safety_params_list,
-                asil_level=asil_level,
-                filename=doc.original_filename,
+            # Run 2-step design agent workflow
+            design_data = self._execute_design_agent_workflow(
+                tenant_id, document_id, fc_text, doc.original_filename
             )
 
-            _REQUIRED_SECTIONS = {
-                "overview",
-                "references",
-                "system_architecture",
-                "interface_definition",
-                "dynamic_behavior",
-                "resource_consumption",
-                "error_handling",
-                "test_strategy",
-            }
-            if not isinstance(sections, dict):
-                raise ValueError(f"LLM 返回的 sections 必须为字典，实际类型: {type(sections).__name__}")
-            missing = _REQUIRED_SECTIONS - set(sections.keys())
-            if missing:
-                raise ValueError(f"设计文档缺少章节: {', '.join(missing)}")
-            for key, section in sections.items():
-                if not isinstance(section, dict):
-                    raise ValueError(f"章节 '{key}' 格式错误: 必须为字典，实际类型: {type(section).__name__}")
-                if "content" not in section or not isinstance(section["content"], str):
-                    raise ValueError(f"章节 '{key}' 缺少 content 字段或类型错误")
-                if "polarion_trace_id" not in section or not isinstance(section["polarion_trace_id"], str):
-                    raise ValueError(f"章节 '{key}' 缺少 polarion_trace_id 字段或类型错误")
+            # Persist Agent output to software_detailed_design
+            asil_level = self._resolve_asil_from_design(design_data)
+            self.sdd_repo.update_status(
+                document_id,
+                tenant_id,
+                "completed",
+                design_data=design_data,
+            )
+
+            # Build legacy-compatible sections for frontend
+            legacy_sections = self._build_legacy_sections(design_data)
 
             self.design_repo.update_status(
                 document_id,
                 tenant_id,
                 "completed",
-                sections=sections,
+                sections=legacy_sections,
                 asil_level=asil_level,
             )
 
@@ -193,12 +183,7 @@ class DesignDocumentService:
         except Exception as exc:
             logger.exception("Design document generation failed for document %s", document_id)
             error_msg = str(exc) if str(exc) else "设计文档生成过程中发生未知错误"
-            self.design_repo.update_status(
-                document_id,
-                tenant_id,
-                "failed",
-                error_message=error_msg,
-            )
+            self._mark_failed(document_id, tenant_id, error_msg)
             # Rollback pipeline status if it was promoted to in_design during a re-trigger
             doc = self.doc_repo.get_by_id(document_id, tenant_id)
             if doc is not None and doc.pipeline_status == "in_design":
@@ -207,11 +192,122 @@ class DesignDocumentService:
                 self.db.commit()
                 self.db.refresh(doc)
 
+    def _execute_design_agent_workflow(
+        self,
+        tenant_id: int,
+        document_id: str,
+        document_text: str,
+        filename: str,
+    ) -> dict:
+        """Run the 2-step design agent workflow and return the detailed design data."""
+        template_dir = Path(__file__).parent.parent / "agent" / "prompts"
+        steps = build_design_steps(template_dir)
+
+        context = WorkflowContext(
+            document_text=document_text,
+            filename=filename,
+            tenant_id=tenant_id,
+            document_id=document_id,
+        )
+
+        engine = AgentWorkflowEngine(
+            steps=steps,
+            llm_client=self.llm_client,
+        )
+
+        result = engine.run(context)
+
+        detail_record = result.get("design_02_detailed_design")
+        if detail_record is None or detail_record.output is None:
+            raise WorkflowFailedError("design_02_detailed_design did not produce output")
+
+        design_data = detail_record.output
+        if not isinstance(design_data, dict):
+            raise WorkflowFailedError("design_02_detailed_design output is not a dict")
+
+        return design_data
+
+    def _build_legacy_sections(self, design_data: dict) -> dict:
+        """Convert new Agent output format to legacy DesignDocument.sections format."""
+        base_trace = "POL-DSGN-001"
+        overview = design_data.get("overview", "")
+        fc_arch = design_data.get("fc_architecture")
+        detail = design_data.get("detailed_design")
+        safety = design_data.get("safety_design")
+        verify = design_data.get("verification_strategy")
+
+        return {
+            "overview": {
+                "content": overview,
+                "polarion_trace_id": f"{base_trace}-001",
+            },
+            "references": {
+                "content": f"Project: {design_data.get('project_number', '')}\nVersion: {design_data.get('document_version', '')}",
+                "polarion_trace_id": f"{base_trace}-002",
+            },
+            "system_architecture": {
+                "content": json.dumps(fc_arch, ensure_ascii=False, indent=2) if fc_arch else "",
+                "polarion_trace_id": f"{base_trace}-003",
+            },
+            "interface_definition": {
+                "content": json.dumps(detail, ensure_ascii=False, indent=2) if detail else "",
+                "polarion_trace_id": f"{base_trace}-004",
+            },
+            "dynamic_behavior": {
+                "content": "See system architecture for state machines and call graphs.",
+                "polarion_trace_id": f"{base_trace}-005",
+            },
+            "resource_consumption": {
+                "content": "See detailed design for resource estimates.",
+                "polarion_trace_id": f"{base_trace}-006",
+            },
+            "error_handling": {
+                "content": json.dumps(safety, ensure_ascii=False, indent=2) if safety else "",
+                "polarion_trace_id": f"{base_trace}-007",
+            },
+            "test_strategy": {
+                "content": json.dumps(verify, ensure_ascii=False, indent=2) if verify else "",
+                "polarion_trace_id": f"{base_trace}-008",
+            },
+        }
+
+    def _resolve_asil_from_design(self, design_data: dict) -> str:
+        """Extract highest ASIL from FC modules in design output."""
+        fc_arch = design_data.get("fc_architecture") or {}
+        modules = fc_arch.get("fc_modules") or []
+        levels = set()
+        for mod in modules:
+            level = mod.get("asil_level")
+            if level:
+                levels.add(level.upper())
+        valid = {l for l in levels if l in _ASIL_ORDER}
+        if not valid:
+            return "QM"
+        return sorted(valid, key=lambda x: _ASIL_ORDER.get(x, 0), reverse=True)[0]
+
+    def _mark_failed(self, document_id: str, tenant_id: int, error_message: str) -> None:
+        """Mark both DesignDocument and SoftwareDetailedDesign as failed."""
+        self.design_repo.update_status(
+            document_id, tenant_id, "failed", error_message=error_message
+        )
+        try:
+            self.sdd_repo.update_status(
+                document_id, tenant_id, "failed", error_message=error_message
+            )
+        except Exception:
+            logger.exception("Failed to mark SoftwareDetailedDesign as failed")
+
     def get_design_document(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
         if doc is None:
             raise DocumentNotFoundError(document_id)
 
+        # Prefer new SoftwareDetailedDesign table if available
+        sdd = self.sdd_repo.get_by_document(document_id, tenant_id)
+        if sdd is not None:
+            return self._get_design_from_sdd(sdd, document_id)
+
+        # Fallback to legacy DesignDocument table
         design = self.design_repo.get_by_document_id(document_id, tenant_id)
         if design is None:
             return {
@@ -222,7 +318,6 @@ class DesignDocumentService:
                 "error_message": None,
             }
 
-        # Lazy timeout check: report stuck running tasks without mutating DB in a GET path
         reported_status = design.status
         reported_error = design.error_message
         if reported_status == "running":
@@ -244,39 +339,55 @@ class DesignDocumentService:
             "error_message": reported_error,
         }
 
-    def _build_requirements_list(
-        self, roots: List, _depth: int = 0
-    ) -> list[dict]:
-        if _depth > _MAX_TREE_DEPTH:
-            raise ValueError(
-                f"Requirement tree depth exceeds max limit {_MAX_TREE_DEPTH}"
-            )
-        result = []
-        for r in roots:
-            node = {
-                "requirement_id": r.requirement_id,
-                "description": r.description,
-                "chapter": r.chapter,
-                "asil_level": r.asil_level,
-                "children": self._build_requirements_list(r.children or [], _depth + 1),
-            }
-            result.append(node)
-        return result
+    def _get_design_from_sdd(self, sdd, document_id: str) -> dict:
+        """Build design document response from SoftwareDetailedDesign record."""
+        reported_status = sdd.status
+        reported_error = sdd.error_message
+        if reported_status == "running":
+            last_update = sdd.updated_at or sdd.created_at
+            if last_update:
+                if last_update.tzinfo is None:
+                    last_update = last_update.replace(tzinfo=timezone.utc)
+                if (
+                    datetime.now(timezone.utc) - last_update
+                ).total_seconds() > _TIMEOUT_MINUTES * 60:
+                    reported_status = "failed"
+                    reported_error = "设计文档生成超时（超过10分钟）"
 
-    def _resolve_asil_level(self, requirements: list[dict]) -> str | None:
-        """Extract the highest ASIL level from requirements; return None if none found."""
-        levels = set()
-        self._collect_asil_levels(requirements, levels)
-        valid_levels = {l for l in levels if l in _ASIL_ORDER}
-        if not valid_levels:
-            return None
-        sorted_levels = sorted(valid_levels, key=lambda x: _ASIL_ORDER.get(x, 0), reverse=True)
-        return sorted_levels[0]
+        # Convert stored JSON fields back to dict for legacy sections
+        try:
+            fc_arch = json.loads(sdd.fc_architecture) if sdd.fc_architecture else {}
+        except json.JSONDecodeError:
+            fc_arch = {}
+        try:
+            detail = json.loads(sdd.detailed_design) if sdd.detailed_design else []
+        except json.JSONDecodeError:
+            detail = []
+        try:
+            safety = json.loads(sdd.safety_design) if sdd.safety_design else {}
+        except json.JSONDecodeError:
+            safety = {}
+        try:
+            verify = json.loads(sdd.verification_strategy) if sdd.verification_strategy else {}
+        except json.JSONDecodeError:
+            verify = {}
 
-    def _collect_asil_levels(self, requirements: list[dict], levels: set) -> None:
-        for req in requirements:
-            level = req.get("asil_level")
-            if level:
-                levels.add(level.upper())
-            children = req.get("children") or []
-            self._collect_asil_levels(children, levels)
+        design_data = {
+            "overview": sdd.overview or "",
+            "project_number": sdd.project_number or "",
+            "document_version": sdd.document_version or "",
+            "fc_architecture": fc_arch,
+            "detailed_design": detail,
+            "safety_design": safety,
+            "verification_strategy": verify,
+        }
+        legacy_sections = self._build_legacy_sections(design_data)
+
+        return {
+            "document_id": document_id,
+            "status": reported_status,
+            "asil_level": self._resolve_asil_from_design(design_data),
+            "sections": legacy_sections,
+            "error_message": reported_error,
+        }
+

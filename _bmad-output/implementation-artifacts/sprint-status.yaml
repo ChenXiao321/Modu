@@ -51,10 +51,10 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: 方案设计与审查协作
-  epic-2: in-progress
+  epic-2: done
   2-1-design-document-auto-generation: done
   2-2-design-document-split-screen-review-and-online-correction: done
-  2-3-design-verification-gate-and-review-record-locking: backlog
+  2-3-design-verification-gate-and-review-record-locking: done
   epic-2-retrospective: optional
 
   # Epic 3: 合规代码自动生成

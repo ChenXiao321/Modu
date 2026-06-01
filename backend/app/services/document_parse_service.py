@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 _MAX_TREE_DEPTH = 10
 _MAX_REQUIREMENT_ID_LEN = 50
 _MAX_EXTRACTED_TEXT_LEN = 10000
+_OCR_BATCH_SIZE = 100
 
 
 _OCR_FILE_TYPES = {
@@ -338,12 +339,15 @@ class DocumentParseService:
         document_id: str,
         raw_fields: List[dict],
     ) -> None:
-        # Atomic replace: delete old records in the same transaction
+        # Step 1: delete old records and commit independently to free locks/space
         self.db.query(OcrExtractionResult).filter(
             OcrExtractionResult.document_id == document_id,
             OcrExtractionResult.tenant_id == tenant_id,
         ).delete(synchronize_session="fetch")
+        self.db.commit()
 
+        # Step 2: validate and build result objects upfront
+        validated_results: List[OcrExtractionResult] = []
         for idx, raw in enumerate(raw_fields, start=1):
             field_id = raw.get("field_id")
             extracted_text = raw.get("extracted_text")
@@ -384,8 +388,14 @@ class DocumentParseService:
                 source_page=source_page,
                 review_status="pending",
             )
-            self.db.add(result)
-        self.db.commit()
+            validated_results.append(result)
+
+        # Step 3: batch commit to avoid oversized transactions
+        for i in range(0, len(validated_results), _OCR_BATCH_SIZE):
+            batch = validated_results[i : i + _OCR_BATCH_SIZE]
+            for result in batch:
+                self.db.add(result)
+            self.db.commit()
 
     def _update_pipeline_block_status(self, tenant_id: int, document_id: str) -> None:
         """Update pipeline status based on low-confidence OCR fields."""

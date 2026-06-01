@@ -10,6 +10,7 @@ from app.exceptions import (
     CommentNotFoundError,
     DesignDocumentNotFoundError,
     DesignDocumentNotReadyError,
+    DesignReviewLockedError,
     DocumentNotFoundError,
     InvalidSectionKeyError,
     PendingCommentsExistError,
@@ -25,6 +26,7 @@ from app.repositories.document_repository import DocumentRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.review_comment_repository import ReviewCommentRepository
 from app.repositories.safety_parameter_repository import SafetyParameterRepository
+from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
 
 _VALID_SECTION_KEYS = {
     "overview",
@@ -49,6 +51,7 @@ class DesignReviewService:
         self.comment_repo = ReviewCommentRepository(db)
         self.req_repo = RequirementRepository(db)
         self.safety_repo = SafetyParameterRepository(db)
+        self.sdd_repo = SoftwareDetailedDesignRepository(db)
 
     def get_review_context(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
@@ -99,6 +102,12 @@ class DesignReviewService:
             "pipeline_status": doc.pipeline_status,
         }
 
+    def _assert_not_locked(self, tenant_id: int, document_id: str) -> None:
+        """Raise DesignReviewLockedError if the document review has been submitted."""
+        doc = self.doc_repo.get_by_id(document_id, tenant_id)
+        if doc is not None and doc.pipeline_status == "design_reviewed":
+            raise DesignReviewLockedError(document_id)
+
     def save_revision(
         self, tenant_id: int, document_id: str, section_key: str, revised_content: str, author: str
     ) -> dict:
@@ -109,6 +118,7 @@ class DesignReviewService:
         if not author.strip():
             raise InvalidSectionKeyError("author")
 
+        self._assert_not_locked(tenant_id, document_id)
         design = self._get_completed_design(tenant_id, document_id, lock=True)
         sections = copy.deepcopy(design.sections) if design.sections else {}
         current_section = sections.get(section_key, {})
@@ -182,6 +192,7 @@ class DesignReviewService:
         if not author.strip():
             raise InvalidSectionKeyError("author")
 
+        self._assert_not_locked(tenant_id, document_id)
         design = self._get_completed_design(tenant_id, document_id)
 
         comment = ReviewComment(
@@ -234,6 +245,7 @@ class DesignReviewService:
         if not resolved_by.strip():
             raise InvalidSectionKeyError("resolved_by")
 
+        self._assert_not_locked(tenant_id, document_id)
         comment = self.comment_repo.get_by_id_and_document(comment_id, document_id, tenant_id)
         if comment is None:
             raise CommentNotFoundError(comment_id)
@@ -294,6 +306,12 @@ class DesignReviewService:
         self.db.commit()
         self.db.refresh(doc)
 
+        # Lock the software detailed design record as well
+        try:
+            self.sdd_repo.update_status(document_id, tenant_id, "reviewed")
+        except Exception:
+            logger.exception("Failed to mark SoftwareDetailedDesign as reviewed")
+
         return {
             "document_id": document_id,
             "pipeline_status": doc.pipeline_status,
@@ -306,6 +324,7 @@ class DesignReviewService:
         if not author.strip():
             raise InvalidSectionKeyError("author")
 
+        self._assert_not_locked(tenant_id, document_id)
         revision = self.revision_repo.get_by_id_and_document(revision_id, document_id, tenant_id)
         if revision is None:
             raise RevisionNotFoundError(revision_id)

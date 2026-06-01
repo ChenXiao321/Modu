@@ -180,6 +180,15 @@ class PipelineStatusInvalidError(ModuException):
         )
 
 
+class DesignReviewLockedError(ModuException):
+    def __init__(self, document_id: str) -> None:
+        super().__init__(
+            error_code="DESIGN_REVIEW_LOCKED",
+            message="设计文档审查已提交并锁定，禁止修改",
+            detail={"document_id": document_id},
+        )
+
+
 _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FILE_TOO_LARGE": 413,
     "UNSUPPORTED_FILE_TYPE": 415,
@@ -200,6 +209,7 @@ _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "PENDING_COMMENTS_EXIST": 409,
     "PIPELINE_STATUS_INVALID": 409,
     "COMMENT_ALREADY_RESOLVED": 409,
+    "DESIGN_REVIEW_LOCKED": 409,
 }
 
 
