@@ -15,6 +15,7 @@ from app.models.agent_workflow_run import AgentWorkflowRun  # noqa: F401
 from app.models.fc_requirement_document import FcRequirementDocument  # noqa: F401
 from app.models.safety_critical_parameter import SafetyCriticalParameter  # noqa: F401
 from app.models.software_detailed_design import SoftwareDetailedDesign  # noqa: F401
+from app.models.generated_code_file import GeneratedCodeFile  # noqa: F401
 from app.routers.v1 import documents
 
 def create_app() -> FastAPI:

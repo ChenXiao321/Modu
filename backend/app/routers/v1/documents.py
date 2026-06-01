@@ -21,6 +21,7 @@ from app.schemas.documents import (
     UploadInitResponse,
 )
 from app.schemas.requirements import ConfirmFieldRequest
+from app.services.code_generation_service import CodeGenerationService
 from app.services.design_document_service import DesignDocumentService
 from app.services.design_review_service import DesignReviewService
 from app.repositories.document_repository import DocumentRepository
@@ -28,6 +29,7 @@ from app.repositories.fc_requirement_repository import FcRequirementRepository
 from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
 from app.services.document_parse_service import DocumentParseService
 from app.services.document_service import DocumentService
+from app.tasks.generate_code import schedule_generate_code
 from app.tasks.generate_design_document import schedule_generate_design_document
 from app.tasks.parse_document import schedule_parse
 
@@ -360,3 +362,43 @@ def get_detailed_design(
         return _wrap({"status": "pending", "design": None})
 
     return _wrap({"status": design.status, "design": design_repo.to_dict(design)})
+
+
+# ---------------------------------------------------------------------------
+# Code Generation endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/{document_id}/code-generation", response_model=StandardResponse)
+def trigger_code_generation(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = CodeGenerationService(db)
+    result = svc.trigger_generate(tenant_id, document_id)
+    schedule_generate_code(background_tasks, tenant_id, document_id)
+    return _wrap(result)
+
+
+@router.get("/{document_id}/code-files", response_model=StandardResponse)
+def get_code_files(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = CodeGenerationService(db)
+    files = svc.get_code_files(tenant_id, document_id)
+    return _wrap({"document_id": document_id, "files": files})
+
+
+@router.get("/{document_id}/code-files/{file_id}", response_model=StandardResponse)
+def get_code_file(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    file_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = CodeGenerationService(db)
+    result = svc.get_code_file_by_id(tenant_id, document_id, file_id)
+    return _wrap(result)

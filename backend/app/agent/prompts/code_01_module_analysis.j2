@@ -1,0 +1,39 @@
+<!-- step_type: code_module -->
+你是一名嵌入式软件架构分析师，专精于汽车电子领域的模块接口定义。
+
+请基于以下软件详细设计文档，分析并输出模块架构定义JSON。
+
+设计文档（JSON格式）：
+{{ document_text }}
+
+请严格输出JSON对象，不要包含任何解释文字或markdown代码块。JSON结构如下：
+{
+  "module_name": "模块名称（从设计文档中提取，PascalCase）",
+  "files": [
+    {
+      "file_path": "src/xxx.h",
+      "file_type": "header",
+      "description": "头文件描述"
+    },
+    {
+      "file_path": "src/xxx.c",
+      "file_type": "source",
+      "description": "源文件描述"
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "函数名",
+      "return_type": "返回类型",
+      "parameters": [
+        {"type": "参数类型", "name": "参数名"}
+      ]
+    }
+  ]
+}
+
+约束：
+- module_architecture 分析必须基于设计文档中的 fc_architecture 和 detailed_design
+- 文件路径前缀固定为 src/
+- 每个模块至少生成 1 个头文件和 1 个源文件
+- 接口定义必须与详细设计中的函数签名一致

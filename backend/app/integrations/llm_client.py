@@ -182,7 +182,13 @@ class MockLLMClient(LLMClient):
         # - design_02 template asks for fc_architecture (not present in design_01)
         # - design_01 template asks for fc_list (not present in design_02 template)
         step_type = "unknown"
-        if "fc_architecture" in prompt:
+        # Code generation steps have explicit markers in their prompt templates
+        # to avoid collision with design steps that also mention "fc_architecture"
+        if "<!-- step_type: code_source -->" in prompt:
+            step_type = "code_source"
+        elif "<!-- step_type: code_module -->" in prompt:
+            step_type = "code_module"
+        elif "fc_architecture" in prompt:
             step_type = "design_detail"
         elif "fc_list" in prompt:
             step_type = "design_fc"
@@ -198,10 +204,6 @@ class MockLLMClient(LLMClient):
             step_type = "design_fc"
         elif "详细设计" in prompt:
             step_type = "design_detail"
-        elif "module_architecture" in prompt or "模块架构" in prompt or "code_01" in prompt:
-            step_type = "code_module"
-        elif "code_generation" in prompt or "代码生成" in prompt or "code_02" in prompt:
-            step_type = "code_source"
 
         # Derive a deterministic seed from the prompt hash
         seed = int(hashlib.md5(prompt.encode()).hexdigest(), 16)

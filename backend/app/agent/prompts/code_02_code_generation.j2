@@ -1,0 +1,43 @@
+<!-- step_type: code_source -->
+你是一名嵌入式软件工程师，专精于TC38x平台、Tasking 6.3.1编译器和MISRA C:2012合规代码开发。
+
+请基于以下模块架构定义，生成完整的C语言代码文件。
+
+模块架构定义（JSON格式）：
+{{ document_text }}
+
+前一步骤输出的模块架构：
+{% if previous_outputs and previous_outputs.code_01_module_analysis %}
+{{ previous_outputs.code_01_module_analysis | tojson }}
+{% else %}
+{}
+{% endif %}
+
+请严格输出JSON对象，不要包含任何解释文字或markdown代码块。JSON结构如下：
+{
+  "files": [
+    {
+      "file_path": "src/xxx.h",
+      "file_type": "header",
+      "content": "完整头文件内容，换行符使用\\n转义"
+    },
+    {
+      "file_path": "src/xxx.c",
+      "file_type": "source",
+      "content": "完整源文件内容，换行符使用\\n转义"
+    }
+  ]
+}
+
+代码生成约束（MISRA C:2012 + TC38x + Tasking 6.3.1）：
+- 头文件必须包含 #ifndef / #define / #endif 包含守卫
+- 源文件必须包含对应头文件的 #include（使用双引号）
+- 禁止动态内存分配（malloc/free/calloc/realloc）
+- 每个函数必须有单一出口（仅一个 return 语句，位于函数末尾）
+- 函数返回值必须被使用，未使用的返回值需显式转换为 void
+- 使用明确的整数类型（uint8_t, uint16_t, uint32_t 等，而非 int/short/long）
+- 文件头注释包含ASPICE追溯标识占位符格式：/* TRACE-ID: POL-CODE-{seq:03d} */
+- Tasking 编译器适配：关键函数使用 __attribute__((noinline)) 避免编译器优化导致时序问题
+- TC38x 寄存器访问使用 volatile 修饰的指针解引用，禁止直接使用位域
+- 所有宏定义使用全大写蛇形命名，函数使用 PascalCase（如 WdgM_Init）
+- 源文件内容中的换行符必须使用 \\n 转义，禁止在JSON字符串值内直接出现未转义的换行

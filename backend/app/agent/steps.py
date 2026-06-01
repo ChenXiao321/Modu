@@ -430,3 +430,158 @@ def build_design_steps(template_dir: Path) -> list[Step]:
         FcIdentificationStep(template_dir),
         DetailedDesignStep(template_dir),
     ]
+
+
+class CodeModuleAnalysisStep(Step):
+    """Code Step 1: Analyze design document and output module architecture."""
+
+    def __init__(self, template_dir: Path) -> None:
+        super().__init__(
+            name="code_01_module_analysis",
+            prompt_template="code_01_module_analysis.j2",
+            template_dir=template_dir,
+        )
+
+    def parse_output(self, raw: str) -> dict[str, Any]:
+        cleaned = _clean_json_response(raw)
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            raise LLMOutputFormatError(
+                f"code_01_module_analysis: invalid JSON: {exc}", raw_response=raw
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise LLMOutputFormatError(
+                "code_01_module_analysis: expected JSON object", raw_response=raw
+            )
+
+        module_name = data.get("module_name")
+        files = data.get("files") or []
+        interfaces = data.get("interfaces") or []
+
+        if not isinstance(files, list):
+            raise LLMOutputFormatError(
+                "code_01_module_analysis: 'files' must be a list", raw_response=raw
+            )
+        if not isinstance(interfaces, list):
+            raise LLMOutputFormatError(
+                "code_01_module_analysis: 'interfaces' must be a list", raw_response=raw
+            )
+        if not module_name:
+            raise LLMOutputFormatError(
+                "code_01_module_analysis: 'module_name' is required", raw_response=raw
+            )
+
+        # Validate each file entry
+        for idx, f in enumerate(files):
+            if not isinstance(f, dict):
+                raise LLMOutputFormatError(
+                    f"code_01_module_analysis: file at index {idx} is not a dict",
+                    raw_response=raw,
+                )
+            if not f.get("file_path") or not f.get("file_type"):
+                raise LLMOutputFormatError(
+                    f"code_01_module_analysis: file at index {idx} missing file_path or file_type",
+                    raw_response=raw,
+                )
+
+        return {
+            "module_name": str(module_name).strip(),
+            "files": files,
+            "interfaces": interfaces,
+        }
+
+
+class CodeSourceGenerationStep(Step):
+    """Code Step 2: Generate complete C code files based on module architecture."""
+
+    def __init__(self, template_dir: Path) -> None:
+        super().__init__(
+            name="code_02_code_generation",
+            prompt_template="code_02_code_generation.j2",
+            template_dir=template_dir,
+        )
+
+    def parse_output(self, raw: str) -> dict[str, Any]:
+        cleaned = _clean_json_response(raw)
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError as exc:
+            raise LLMOutputFormatError(
+                f"code_02_code_generation: invalid JSON: {exc}", raw_response=raw
+            ) from exc
+
+        if not isinstance(data, dict):
+            raise LLMOutputFormatError(
+                "code_02_code_generation: expected JSON object", raw_response=raw
+            )
+
+        files = data.get("files") or []
+        if not isinstance(files, list):
+            raise LLMOutputFormatError(
+                "code_02_code_generation: 'files' must be a list", raw_response=raw
+            )
+        if not files:
+            raise LLMOutputFormatError(
+                "code_02_code_generation: 'files' array is empty", raw_response=raw
+            )
+
+        validated_files = []
+        header_found = False
+        source_found = False
+
+        for idx, f in enumerate(files):
+            if not isinstance(f, dict):
+                raise LLMOutputFormatError(
+                    f"code_02_code_generation: file at index {idx} is not a dict",
+                    raw_response=raw,
+                )
+            file_path = f.get("file_path")
+            file_type = f.get("file_type")
+            content = f.get("content")
+
+            if not file_path or not file_type or content is None:
+                raise LLMOutputFormatError(
+                    f"code_02_code_generation: file at index {idx} missing file_path, file_type, or content",
+                    raw_response=raw,
+                )
+
+            file_type = str(file_type).lower()
+            if file_type not in ("header", "source"):
+                raise LLMOutputFormatError(
+                    f"code_02_code_generation: file at index {idx} has invalid file_type '{file_type}'",
+                    raw_response=raw,
+                )
+
+            if file_type == "header":
+                header_found = True
+            elif file_type == "source":
+                source_found = True
+
+            validated_files.append({
+                "file_path": str(file_path).strip(),
+                "file_type": file_type,
+                "content": str(content),
+            })
+
+        if not header_found:
+            raise LLMOutputFormatError(
+                "code_02_code_generation: at least one header file is required",
+                raw_response=raw,
+            )
+        if not source_found:
+            raise LLMOutputFormatError(
+                "code_02_code_generation: at least one source file is required",
+                raw_response=raw,
+            )
+
+        return {"files": validated_files}
+
+
+def build_code_generation_steps(template_dir: Path) -> list[Step]:
+    """Return the 2-step code generation pipeline."""
+    return [
+        CodeModuleAnalysisStep(template_dir),
+        CodeSourceGenerationStep(template_dir),
+    ]
