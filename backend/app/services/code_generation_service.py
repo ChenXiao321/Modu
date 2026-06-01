@@ -17,6 +17,7 @@ from app.exceptions import (
 )
 from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
 from app.models.document import Document
+from app.models.generated_code_file import GeneratedCodeFile
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.generated_code_file_repository import GeneratedCodeFileRepository
 from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
@@ -44,7 +45,16 @@ class CodeGenerationService:
             self.llm_client: LLMClient = MockLLMClient()
 
     def trigger_generate(self, tenant_id: int, document_id: str) -> dict:
-        doc = self.doc_repo.get_by_id(document_id, tenant_id)
+        # Lock the document row to prevent concurrent triggers (TOCTOU protection)
+        doc = (
+            self.db.query(Document)
+            .filter(
+                Document.id == document_id,
+                Document.tenant_id == tenant_id,
+            )
+            .with_for_update()
+            .first()
+        )
         if doc is None:
             raise DocumentNotFoundError(document_id)
         if doc.parse_status != "completed":
@@ -55,8 +65,11 @@ class CodeGenerationService:
         if doc.pipeline_status == "code_generation_running":
             raise DocumentNotReadyError(document_id, "代码生成任务已在进行中")
 
-        # Delete old code files if any
-        self.code_repo.delete_by_document(document_id, tenant_id)
+        # Delete old code files in the same transaction as status update
+        self.db.query(GeneratedCodeFile).filter(
+            GeneratedCodeFile.document_id == document_id,
+            GeneratedCodeFile.tenant_id == tenant_id,
+        ).delete(synchronize_session="fetch")
 
         # Update pipeline status
         doc.pipeline_status = "code_generation_running"
@@ -116,16 +129,17 @@ class CodeGenerationService:
                 tenant_id, document_id, design_text, doc.original_filename
             )
 
-            # Persist generated files
+            # Persist generated files in a single transaction
             files = code_data.get("files") or []
             for f in files:
-                self.code_repo.create(
+                record = GeneratedCodeFile(
                     tenant_id=tenant_id,
                     document_id=document_id,
                     file_path=f["file_path"],
                     file_type=f["file_type"],
                     content=f["content"],
                 )
+                self.db.add(record)
 
             # Transition pipeline to code_generated
             doc.pipeline_status = "code_generated"
@@ -215,6 +229,12 @@ class CodeGenerationService:
         self, document_id: str, tenant_id: int, error_message: str
     ) -> None:
         """Mark code generation as failed and rollback pipeline status if needed."""
+        # Clean up any partially created code files
+        self.db.query(GeneratedCodeFile).filter(
+            GeneratedCodeFile.document_id == document_id,
+            GeneratedCodeFile.tenant_id == tenant_id,
+        ).delete(synchronize_session="fetch")
+
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
         if doc is not None and doc.pipeline_status == "code_generation_running":
             doc.pipeline_status = "design_reviewed"
