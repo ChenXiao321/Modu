@@ -59,7 +59,7 @@ development_status:
 
   # Epic 3: 合规代码自动生成
   epic-3: in-progress
-  3-1-misra-compliant-code-auto-generation: ready-for-dev
+  3-1-misra-compliant-code-auto-generation: done
   3-2-polarion-trace-id-embedding-and-template-consistency: backlog
   3-3-asil-level-adaptive-code-generation: backlog
   epic-3-retrospective: optional
