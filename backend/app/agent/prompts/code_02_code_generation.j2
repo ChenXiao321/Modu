@@ -1,9 +1,7 @@
 <!-- step_type: code_source -->
 你是一名嵌入式软件工程师，专精于TC38x平台、Tasking 6.3.1编译器和MISRA C:2012合规代码开发。
 
-请基于以下模块架构定义，生成完整的C语言代码文件。
-
-模块架构定义（JSON格式）：
+以下是一个 FC 模块的完整代码框架（由 FC 生成器生成），包含 10 个文件：
 {{ document_text }}
 
 前一步骤输出的模块架构：
@@ -13,31 +11,31 @@
 {}
 {% endif %}
 
-请严格输出JSON对象，不要包含任何解释文字或markdown代码块。JSON结构如下：
+任务：
+请基于上述 FC 框架和设计文档，生成完整的 10 个文件。
+
+要求：
+1. 保留版权头、Memory Map 分段标记（#define XXX_CODE_START / #include "MemMap.h"）、文件结构不变
+2. 替换函数体中的 TODO/空实现为具体业务逻辑（基于 detailed_design）
+3. 替换示例性类型定义为设计文档中定义的类型（基于 detailed_design）
+4. 替换配置数据为设计文档中定义的值（基于 detailed_design）
+5. 保留防御性编程框架（CheckArgIn、错误检测、#if CFG_DEV_ERROR_DETECT）
+6. 文件头注释包含 ASPICE 追溯标识占位符格式：/* TRACE-ID: POL-CODE-{seq:03d} */
+7. 所有宏定义使用全大写蛇形命名，函数使用 PascalCase（如 WdgM_Init）
+8. 源文件内容中的换行符必须使用 \\n 转义，禁止在 JSON 字符串值内直接出现未转义的换行
+
+请严格输出 JSON 对象，不要包含任何解释文字或 markdown 代码块。JSON 结构如下：
 {
   "files": [
-    {
-      "file_path": "src/xxx.h",
-      "file_type": "header",
-      "content": "完整头文件内容，换行符使用\\n转义"
-    },
-    {
-      "file_path": "src/xxx.c",
-      "file_type": "source",
-      "content": "完整源文件内容，换行符使用\\n转义"
-    }
+    {"file_path": "src/xxx.h", "file_type": "header", "content": "完整头文件内容"},
+    {"file_path": "src/xxx.c", "file_type": "source", "content": "完整源文件内容"},
+    {"file_path": "src/xxx_Types.h", "file_type": "header", "content": "类型定义头文件"},
+    {"file_path": "src/xxx_Cfg.c", "file_type": "source", "content": "配置实现源文件"},
+    {"file_path": "src/xxx_Cfg.h", "file_type": "header", "content": "配置头文件"},
+    {"file_path": "src/xxx_CfgData.h", "file_type": "header", "content": "配置数据结构头文件"},
+    {"file_path": "src/xxx_Cali.c", "file_type": "source", "content": "标定参数源文件"},
+    {"file_path": "src/xxx_Callout.c", "file_type": "source", "content": "Callout 实现源文件"},
+    {"file_path": "src/xxx_Callout.h", "file_type": "header", "content": "Callout 头文件"},
+    {"file_path": "src/xxx_MemMap.h", "file_type": "header", "content": "Memory Map 头文件"}
   ]
 }
-
-代码生成约束（MISRA C:2012 + TC38x + Tasking 6.3.1）：
-- 头文件必须包含 #ifndef / #define / #endif 包含守卫
-- 源文件必须包含对应头文件的 #include（使用双引号）
-- 禁止动态内存分配（malloc/free/calloc/realloc）
-- 每个函数必须有单一出口（仅一个 return 语句，位于函数末尾）
-- 函数返回值必须被使用，未使用的返回值需显式转换为 void
-- 使用明确的整数类型（uint8_t, uint16_t, uint32_t 等，而非 int/short/long）
-- 文件头注释包含ASPICE追溯标识占位符格式：/* TRACE-ID: POL-CODE-{seq:03d} */
-- Tasking 编译器适配：关键函数使用 __attribute__((noinline)) 避免编译器优化导致时序问题
-- TC38x 寄存器访问使用 volatile 修饰的指针解引用，禁止直接使用位域
-- 所有宏定义使用全大写蛇形命名，函数使用 PascalCase（如 WdgM_Init）
-- 源文件内容中的换行符必须使用 \\n 转义，禁止在JSON字符串值内直接出现未转义的换行

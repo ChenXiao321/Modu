@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,10 @@ from app.repositories.generated_code_file_repository import GeneratedCodeFileRep
 from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
 
 logger = logging.getLogger(__name__)
+
+# Default author used until Auth module is implemented.
+# TODO: Replace with CurrentUser.name when Auth module lands.
+_DEFAULT_AUTHOR = "AI_Generated"
 
 
 class CodeGenerationService:
@@ -84,6 +89,8 @@ class CodeGenerationService:
 
     def execute_generate(self, tenant_id: int, document_id: str) -> None:
         """Synchronous code generation via Agent workflow."""
+        author = _DEFAULT_AUTHOR
+
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
         if doc is None:
             logger.warning("Code generation aborted: document %s not found", document_id)
@@ -113,20 +120,47 @@ class CodeGenerationService:
             if sdd is None:
                 raise ValueError("SoftwareDetailedDesign 不存在，无法生成代码")
             sdd_data = self.sdd_repo.to_dict(sdd)
+
+            # Extract module name from fc_architecture
+            fc_arch = sdd_data.get("fc_architecture") or {}
+            modules = fc_arch.get("fc_modules") or []
+            if not modules:
+                raise ValueError("fc_architecture 中没有 FC 模块，无法确定模块名")
+            module_name = modules[0].get("module_name", "Gp_Unknown")
+
+            # Step 1: Generate FC framework using deterministic templates
+            import tempfile
+            from app.templates.code import CodeGenerator
+
+            generator = CodeGenerator()
+            with tempfile.TemporaryDirectory() as tmpdir:
+                generator.generate_files(module_name, author, tmpdir)
+                module_dir = os.path.join(tmpdir, module_name)
+
+                # Read framework content
+                framework: dict[str, str] = {}
+                for filename in sorted(os.listdir(module_dir)):
+                    filepath = os.path.join(module_dir, filename)
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        framework[filename] = f.read()
+
+            # Step 2: Construct design text including FC framework
             design_text = json.dumps(
                 {
-                    "fc_architecture": sdd_data.get("fc_architecture") or {},
+                    "module_name": module_name,
+                    "fc_architecture": fc_arch,
                     "detailed_design": sdd_data.get("detailed_design") or [],
                     "safety_design": sdd_data.get("safety_design") or {},
                     "overview": sdd_data.get("overview") or "",
+                    "fc_framework": framework,
                 },
                 ensure_ascii=False,
                 indent=2,
             )
 
-            # Run 2-step code generation agent workflow
+            # Step 3: Run LLM agent to fill business logic into FC framework
             code_data = self._execute_code_generation_workflow(
-                tenant_id, document_id, design_text, doc.original_filename
+                tenant_id, document_id, design_text, doc.original_filename, author
             )
 
             # Persist generated files in a single transaction
@@ -196,6 +230,7 @@ class CodeGenerationService:
         document_id: str,
         document_text: str,
         filename: str,
+        author: str,
     ) -> dict:
         """Run the 2-step code generation agent workflow."""
         template_dir = Path(__file__).parent.parent / "agent" / "prompts"
