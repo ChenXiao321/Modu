@@ -128,6 +128,17 @@ def get_requirements(
     return _wrap({"document_id": document_id, "requirements": tree})
 
 
+@router.get("/{document_id}/requirements/quality", response_model=StandardResponse)
+def get_requirements_quality(
+    tenant_id: CurrentTenant,
+    document_id: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    svc = DocumentParseService(db)
+    result = svc.validate_requirements_quality(tenant_id, document_id)
+    return _wrap(result)
+
+
 @router.get("/{document_id}/safety-parameters", response_model=StandardResponse)
 def get_safety_parameters(
     tenant_id: CurrentTenant,

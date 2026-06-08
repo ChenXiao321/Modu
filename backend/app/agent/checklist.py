@@ -2,32 +2,16 @@
 
 import logging
 import re
-from dataclasses import dataclass, field
 from typing import Any
+
+from app.agent.quality_checker import RequirementQualityChecker
+from app.agent.violation import Violation
 
 logger = logging.getLogger(__name__)
 
 _ASIL_LEVELS = {"A", "B", "C", "D", "QM"}
 _MAX_TREE_DEPTH = 10
 _MAX_REQUIREMENT_ID_LEN = 50
-
-
-@dataclass
-class Violation:
-    """A single checklist violation."""
-
-    rule_id: str
-    severity: str  # error | warning | info
-    message: str
-    suggestion: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "rule_id": self.rule_id,
-            "severity": self.severity,
-            "message": self.message,
-            "suggestion": self.suggestion,
-        }
 
 
 class BuiltInRules:
@@ -398,14 +382,17 @@ class ChecklistValidator:
         if step_name == "02_requirement_extraction":
             if isinstance(output, list):
                 violations.extend(BuiltInRules.validate_flat_requirements(output))
+                violations.extend(RequirementQualityChecker.validate_flat(output))
         elif step_name == "03_asil_verification":
             if isinstance(output, dict):
                 reqs = output.get("requirements") or []
                 if isinstance(reqs, list):
                     violations.extend(BuiltInRules.validate_flat_requirements(reqs))
+                    violations.extend(RequirementQualityChecker.validate_flat(reqs))
         elif step_name == "04_hierarchy_resolution":
             if isinstance(output, list):
                 violations.extend(BuiltInRules.validate_requirement_tree(output))
+                violations.extend(RequirementQualityChecker.validate_tree(output))
         elif step_name == "design_01_fc_identification":
             if isinstance(output, dict):
                 violations.extend(BuiltInRules.validate_fc_identification(output))

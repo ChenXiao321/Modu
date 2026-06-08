@@ -1,6 +1,7 @@
 """Agent workflow package for multi-step LLM-driven requirement extraction."""
 
-from app.agent.checklist import ChecklistValidator, Violation
+from app.agent.checklist import ChecklistValidator
+from app.agent.violation import Violation
 from app.agent.loader import load_checklists, load_process_documents
 from app.agent.steps import (
     AsilVerificationStep,

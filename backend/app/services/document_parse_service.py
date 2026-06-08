@@ -15,6 +15,7 @@ from pathlib import Path
 
 from app.agent.checklist import ChecklistValidator
 from app.agent.loader import load_checklists
+from app.agent.quality_checker import RequirementQualityChecker
 from app.agent.steps import build_default_steps
 from app.agent.workflow import AgentWorkflowEngine, WorkflowContext, WorkflowFailedError
 from app.config import settings
@@ -302,6 +303,21 @@ class DocumentParseService:
     def get_requirements_tree(self, tenant_id: int, document_id: str) -> list[dict]:
         roots = self.req_repo.get_roots_by_document(document_id, tenant_id)
         return [self._build_tree_node(r) for r in roots]
+
+    def validate_requirements_quality(self, tenant_id: int, document_id: str) -> dict:
+        """Run G-C050 quality checks against persisted requirement tree."""
+        doc = self.doc_repo.get_by_id(document_id, tenant_id)
+        if doc is None:
+            raise DocumentNotFoundError(document_id)
+        tree = self.get_requirements_tree(tenant_id, document_id)
+        violations = RequirementQualityChecker.validate_tree(tree)
+        summary = RequirementQualityChecker.summarize(violations)
+        return {
+            "document_id": document_id,
+            "parse_status": doc.parse_status,
+            "quality_summary": summary,
+            "violations": [v.to_dict() for v in violations],
+        }
 
     def _build_tree_node(self, req: ParsedRequirement) -> dict:
         return {
