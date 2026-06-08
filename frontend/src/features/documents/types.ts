@@ -130,6 +130,31 @@ export interface ReviewComment {
   resolvedBy?: string
 }
 
+export interface QualityViolation {
+  ruleId: string
+  severity: 'error' | 'warning' | 'info'
+  message: string
+  suggestion?: string
+}
+
+export interface QualitySummary {
+  total: number
+  errorCount: number
+  warningCount: number
+  infoCount: number
+  pass: boolean
+  errors: QualityViolation[]
+  warnings: QualityViolation[]
+  infos: QualityViolation[]
+}
+
+export interface QualityReport {
+  documentId: string
+  parseStatus?: string
+  qualitySummary: QualitySummary
+  violations: QualityViolation[]
+}
+
 export interface DesignReviewContext {
   documentId: string
   designDocument: DesignDocument

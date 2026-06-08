@@ -9,6 +9,7 @@ import {
   OcrField,
   ParseStatusResponse,
   ParseTriggerResponse,
+  QualityReport,
   RequirementTreeNode,
   ReviewComment,
   SafetyParameter,
@@ -82,6 +83,27 @@ export async function getRequirements(documentId: string): Promise<RequirementTr
   const res = await api.get(`/documents/${documentId}/requirements`)
   checkSuccess(res)
   return res.data.data.requirements
+}
+
+export async function getRequirementsQuality(documentId: string): Promise<QualityReport> {
+  const res = await api.get(`/documents/${documentId}/requirements/quality`)
+  checkSuccess(res)
+  const data = res.data.data
+  return {
+    documentId: data.document_id,
+    parseStatus: data.parse_status,
+    qualitySummary: {
+      total: data.quality_summary.total,
+      errorCount: data.quality_summary.error_count,
+      warningCount: data.quality_summary.warning_count,
+      infoCount: data.quality_summary.info_count,
+      pass: data.quality_summary.pass,
+      errors: data.quality_summary.errors || [],
+      warnings: data.quality_summary.warnings || [],
+      infos: data.quality_summary.infos || [],
+    },
+    violations: data.violations || [],
+  }
 }
 
 export async function getSafetyParameters(documentId: string): Promise<SafetyParameter[]> {

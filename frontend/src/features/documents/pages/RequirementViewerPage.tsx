@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Card, Typography, Button, Spin, Alert, Space, Tabs } from 'antd'
+import { Card, Typography, Button, Spin, Alert, Space, Tabs, Tag, List } from 'antd'
 import {
   ArrowLeftOutlined,
   SafetyOutlined,
@@ -10,12 +10,16 @@ import {
   CheckCircleOutlined,
   FileTextOutlined,
   EyeOutlined,
+  AuditOutlined,
+  CloseCircleOutlined,
+  WarningOutlined,
+  InfoCircleOutlined,
 } from '@ant-design/icons'
-import { getRequirements, getSafetyParameters, getOcrResults, confirmOcrField } from '../api'
+import { getRequirements, getSafetyParameters, getOcrResults, confirmOcrField, getRequirementsQuality } from '../api'
 import RequirementTree from '../components/RequirementTree'
 import SafetyParameterTable from '../components/SafetyParameterTable'
 import OcrResultTable from '../components/OcrResultTable'
-import type { RequirementTreeNode, SafetyParameter, OcrField } from '../types'
+import type { RequirementTreeNode, SafetyParameter, OcrField, QualityReport } from '../types'
 
 const { Title, Text } = Typography
 
@@ -25,6 +29,7 @@ const RequirementViewerPage: React.FC = () => {
   const [requirements, setRequirements] = useState<RequirementTreeNode[]>([])
   const [safetyParameters, setSafetyParameters] = useState<SafetyParameter[]>([])
   const [ocrFields, setOcrFields] = useState<OcrField[]>([])
+  const [qualityReport, setQualityReport] = useState<QualityReport | null>(null)
   const [pipelineStatus, setPipelineStatus] = useState<string>('ready')
   const [blockReason, setBlockReason] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
@@ -38,16 +43,20 @@ const RequirementViewerPage: React.FC = () => {
       setLoading(true)
       setError(null)
       try {
-        const [reqs, params, ocr] = await Promise.all([
+        const [reqs, params, ocr, quality] = await Promise.all([
           getRequirements(documentId),
           getSafetyParameters(documentId),
           getOcrResults(documentId),
+          getRequirementsQuality(documentId).catch(() => null),
         ])
         setRequirements(reqs)
         setSafetyParameters(params)
         setOcrFields(ocr.fields)
         setPipelineStatus(ocr.pipelineStatus)
         setBlockReason(ocr.blockReason)
+        if (quality) {
+          setQualityReport(quality)
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : '加载失败')
       } finally {
@@ -91,6 +100,13 @@ const RequirementViewerPage: React.FC = () => {
     (f) => f.confidence < 0.95 && f.reviewStatus !== 'confirmed'
   ).length
 
+  const qualityBadgeColor = (report: QualityReport | null) => {
+    if (!report) return undefined
+    if (report.qualitySummary.errorCount > 0) return '#ff4d4f'
+    if (report.qualitySummary.warningCount > 0) return '#faad14'
+    return '#52c41a'
+  }
+
   const tabItems = [
     {
       key: 'requirements',
@@ -119,6 +135,92 @@ const RequirementViewerPage: React.FC = () => {
             </Card>
           )}
         </>
+      ),
+    },
+    {
+      key: 'quality',
+      label: (
+        <span>
+          <AuditOutlined />
+          质量校验
+          {qualityReport && (
+            <span style={{ marginLeft: 8, color: qualityBadgeColor(qualityReport), fontWeight: 700 }}>
+              {qualityReport.qualitySummary.errorCount > 0 && `${qualityReport.qualitySummary.errorCount} error`}
+              {qualityReport.qualitySummary.errorCount === 0 && qualityReport.qualitySummary.warningCount > 0 && `${qualityReport.qualitySummary.warningCount} warn`}
+              {qualityReport.qualitySummary.pass && 'pass'}
+            </span>
+          )}
+        </span>
+      ),
+      children: (
+        <Card title="需求质量校验报告（G-C050）">
+          {!qualityReport && !loading && (
+            <Alert message="暂无质量报告" description="该文档尚未完成解析或质量校验不可用。" type="info" showIcon />
+          )}
+          {qualityReport && (
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space>
+                {qualityReport.qualitySummary.pass ? (
+                  <Tag color="success"><CheckCircleOutlined /> 全部通过</Tag>
+                ) : (
+                  <Tag color="error"><CloseCircleOutlined /> 存在质量问题</Tag>
+                )}
+                <Text>总计: {qualityReport.qualitySummary.total} 项</Text>
+                <Text type="danger">错误: {qualityReport.qualitySummary.errorCount}</Text>
+                <Text type="warning">警告: {qualityReport.qualitySummary.warningCount}</Text>
+                <Text type="secondary">提示: {qualityReport.qualitySummary.infoCount}</Text>
+              </Space>
+              {qualityReport.qualitySummary.errors.length > 0 && (
+                <Card size="small" title={<span style={{ color: '#ff4d4f' }}><CloseCircleOutlined /> 错误 ({qualityReport.qualitySummary.errors.length})</span>}>
+                  <List
+                    size="small"
+                    dataSource={qualityReport.qualitySummary.errors}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <div>
+                          <Text strong>[{item.ruleId}]</Text> {item.message}
+                          {item.suggestion && <div><Text type="secondary">建议: {item.suggestion}</Text></div>}
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                </Card>
+              )}
+              {qualityReport.qualitySummary.warnings.length > 0 && (
+                <Card size="small" title={<span style={{ color: '#faad14' }}><WarningOutlined /> 警告 ({qualityReport.qualitySummary.warnings.length})</span>}>
+                  <List
+                    size="small"
+                    dataSource={qualityReport.qualitySummary.warnings}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <div>
+                          <Text strong>[{item.ruleId}]</Text> {item.message}
+                          {item.suggestion && <div><Text type="secondary">建议: {item.suggestion}</Text></div>}
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                </Card>
+              )}
+              {qualityReport.qualitySummary.infos.length > 0 && (
+                <Card size="small" title={<span style={{ color: '#8c8c8c' }}><InfoCircleOutlined /> 提示 ({qualityReport.qualitySummary.infos.length})</span>}>
+                  <List
+                    size="small"
+                    dataSource={qualityReport.qualitySummary.infos}
+                    renderItem={(item) => (
+                      <List.Item>
+                        <div>
+                          <Text strong>[{item.ruleId}]</Text> {item.message}
+                          {item.suggestion && <div><Text type="secondary">建议: {item.suggestion}</Text></div>}
+                        </div>
+                      </List.Item>
+                    )}
+                  />
+                </Card>
+              )}
+            </Space>
+          )}
+        </Card>
       ),
     },
     {
