@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -5,21 +7,29 @@ from app.exceptions import (
     ModuException,
     modu_exception_handler,
 )
+from app.models.agent_workflow_run import AgentWorkflowRun  # noqa: F401
 from app.models.base import Base, engine
 from app.models.design_document import DesignDocument  # noqa: F401
 from app.models.design_revision import DesignRevision  # noqa: F401
 from app.models.document import Document  # noqa: F401
+from app.models.fc_requirement_document import FcRequirementDocument  # noqa: F401
+from app.models.generated_code_file import GeneratedCodeFile  # noqa: F401
 from app.models.parsed_requirement import ParsedRequirement  # noqa: F401
 from app.models.review_comment import ReviewComment  # noqa: F401
-from app.models.agent_workflow_run import AgentWorkflowRun  # noqa: F401
-from app.models.fc_requirement_document import FcRequirementDocument  # noqa: F401
 from app.models.safety_critical_parameter import SafetyCriticalParameter  # noqa: F401
 from app.models.software_detailed_design import SoftwareDetailedDesign  # noqa: F401
-from app.models.generated_code_file import GeneratedCodeFile  # noqa: F401
 from app.routers.v1 import documents
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: create database tables on startup."""
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Modu Backend", version="0.1.0")
+    app = FastAPI(title="Modu Backend", version="0.1.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -32,10 +42,6 @@ def create_app() -> FastAPI:
     app.add_exception_handler(ModuException, modu_exception_handler)
 
     app.include_router(documents.router, prefix="/api/v1")
-
-    @app.on_event("startup")
-    def startup() -> None:
-        Base.metadata.create_all(bind=engine)
 
     @app.get("/health")
     def health() -> dict:
