@@ -351,6 +351,8 @@ class RequirementQualityChecker:
         violations: list[Violation] = []
         req_id = req.get("requirement_id")
         description = req.get("description")
+        if not isinstance(description, str):
+            description = ""
         violations.extend(cls.validate_description(description, req_id))
         return violations
 

@@ -1,9 +1,8 @@
 import json
 import logging
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import List
 
 from sqlalchemy.orm import Session
 
@@ -16,7 +15,7 @@ from app.exceptions import (
     DocumentNotReadyError,
     PipelineBlockedError,
 )
-from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
+from app.integrations.llm_client import LiteLLMClient, LLMClient, MockLLMClient
 from app.models.design_document import DesignDocument
 from app.repositories.design_document_repository import DesignDocumentRepository
 from app.repositories.document_repository import DocumentRepository
@@ -41,10 +40,11 @@ class DesignDocumentService:
         self.safety_repo = SafetyParameterRepository(db)
         self.fc_repo = FcRequirementRepository(db)
         self.sdd_repo = SoftwareDetailedDesignRepository(db)
+        self.llm_client: LLMClient
         if llm_client is not None:
-            self.llm_client: LLMClient = llm_client
+            self.llm_client = llm_client
         elif settings.llm_provider == "litellm":
-            self.llm_client: LLMClient = LiteLLMClient(
+            self.llm_client = LiteLLMClient(
                 model=settings.llm_model,
                 api_key=settings.llm_api_key,
                 base_url=settings.llm_base_url or None,
@@ -52,7 +52,7 @@ class DesignDocumentService:
                 max_tokens=settings.llm_max_tokens,
             )
         else:
-            self.llm_client: LLMClient = MockLLMClient()
+            self.llm_client = MockLLMClient()
 
     def trigger_generate(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
@@ -324,9 +324,9 @@ class DesignDocumentService:
             last_update = design.updated_at or design.created_at
             if last_update:
                 if last_update.tzinfo is None:
-                    last_update = last_update.replace(tzinfo=timezone.utc)
+                    last_update = last_update.replace(tzinfo=UTC)
                 if (
-                    datetime.now(timezone.utc) - last_update
+                    datetime.now(UTC) - last_update
                 ).total_seconds() > _TIMEOUT_MINUTES * 60:
                     reported_status = "failed"
                     reported_error = "设计文档生成超时（超过10分钟）"
@@ -347,9 +347,9 @@ class DesignDocumentService:
             last_update = sdd.updated_at or sdd.created_at
             if last_update:
                 if last_update.tzinfo is None:
-                    last_update = last_update.replace(tzinfo=timezone.utc)
+                    last_update = last_update.replace(tzinfo=UTC)
                 if (
-                    datetime.now(timezone.utc) - last_update
+                    datetime.now(UTC) - last_update
                 ).total_seconds() > _TIMEOUT_MINUTES * 60:
                     reported_status = "failed"
                     reported_error = "设计文档生成超时（超过10分钟）"

@@ -1,17 +1,10 @@
 import logging
 import uuid
-from typing import List
+from datetime import UTC
+from pathlib import Path
+from typing import Any
 
 from sqlalchemy.orm import Session
-
-from app.exceptions import (
-    DocumentNotFoundError,
-    DocumentNotReadyError,
-    FieldAlreadyConfirmedError,
-    FieldNotFoundError,
-    PipelineNotBlockedError,
-)
-from pathlib import Path
 
 from app.agent.checklist import ChecklistValidator
 from app.agent.loader import load_checklists
@@ -19,17 +12,24 @@ from app.agent.quality_checker import RequirementQualityChecker
 from app.agent.steps import build_default_steps
 from app.agent.workflow import AgentWorkflowEngine, WorkflowContext, WorkflowFailedError
 from app.config import settings
-from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
+from app.exceptions import (
+    DocumentNotFoundError,
+    DocumentNotReadyError,
+    FieldAlreadyConfirmedError,
+    FieldNotFoundError,
+    PipelineNotBlockedError,
+)
+from app.integrations.llm_client import LiteLLMClient, LLMClient, MockLLMClient
 from app.models.document import Document
 from app.models.ocr_extraction_result import OcrExtractionResult
 from app.models.parsed_requirement import ParsedRequirement
+from app.models.safety_critical_parameter import SafetyCriticalParameter
 from app.repositories.agent_workflow_repository import AgentWorkflowRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.fc_requirement_repository import FcRequirementRepository
 from app.repositories.ocr_result_repository import OcrResultRepository
 from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.safety_parameter_repository import SafetyParameterRepository
-from app.models.safety_critical_parameter import SafetyCriticalParameter
 from app.services.text_extractor import TextExtractor, TextExtractorError
 
 logger = logging.getLogger(__name__)
@@ -55,8 +55,9 @@ class DocumentParseService:
         self.req_repo = RequirementRepository(db)
         self.safety_repo = SafetyParameterRepository(db)
         self.ocr_repo = OcrResultRepository(db)
+        self.llm_client: LLMClient
         if settings.llm_provider == "litellm":
-            self.llm_client: LLMClient = LiteLLMClient(
+            self.llm_client = LiteLLMClient(
                 model=settings.llm_model,
                 api_key=settings.llm_api_key,
                 base_url=settings.llm_base_url or None,
@@ -64,7 +65,7 @@ class DocumentParseService:
                 max_tokens=settings.llm_max_tokens,
             )
         else:
-            self.llm_client: LLMClient = MockLLMClient()
+            self.llm_client = MockLLMClient()
 
     def trigger_parse(self, tenant_id: int, document_id: str) -> dict:
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
@@ -132,7 +133,9 @@ class DocumentParseService:
 
             # Extract and persist safety-critical parameters (best-effort, non-blocking)
             try:
-                raw_parameters = self.llm_client.extract_safety_parameters(text, doc.original_filename)
+                raw_parameters = self.llm_client.extract_safety_parameters(
+                    text, doc.original_filename
+                )
                 if raw_parameters is not None:
                     # Delete old params only after successful extraction to avoid data loss on retry
                     self.safety_repo.delete_by_document(document_id, tenant_id)
@@ -175,7 +178,7 @@ class DocumentParseService:
             all_items.extend(items)
         return all_items
 
-    def _validate_tree_depth(self, nodes: List[dict], current_depth: int = 1) -> None:
+    def _validate_tree_depth(self, nodes: list[dict], current_depth: int = 1) -> None:
         if current_depth > _MAX_TREE_DEPTH:
             raise ValueError(f"需求树深度超过最大限制 ({_MAX_TREE_DEPTH})")
         for node in nodes:
@@ -187,7 +190,7 @@ class DocumentParseService:
         self,
         tenant_id: int,
         document_id: str,
-        raw_requirements: List[dict],
+        raw_requirements: list[dict],
         parent_id: str | None = None,
     ) -> None:
         for raw in raw_requirements:
@@ -244,7 +247,7 @@ class DocumentParseService:
         self,
         tenant_id: int,
         document_id: str,
-        raw_parameters: List[dict],
+        raw_parameters: list[dict],
     ) -> None:
         for raw in raw_parameters:
             param_id = raw.get("parameter_id")
@@ -353,7 +356,7 @@ class DocumentParseService:
         self,
         tenant_id: int,
         document_id: str,
-        raw_fields: List[dict],
+        raw_fields: list[dict],
     ) -> None:
         # Step 1: delete old records and commit independently to free locks/space
         self.db.query(OcrExtractionResult).filter(
@@ -363,9 +366,8 @@ class DocumentParseService:
         self.db.commit()
 
         # Step 2: validate and build result objects upfront
-        validated_results: List[OcrExtractionResult] = []
+        validated_results: list[OcrExtractionResult] = []
         for idx, raw in enumerate(raw_fields, start=1):
-            field_id = raw.get("field_id")
             extracted_text = raw.get("extracted_text")
             confidence = raw.get("confidence")
             if extracted_text is None or confidence is None:
@@ -432,7 +434,9 @@ class DocumentParseService:
             self.db.commit()
             return
 
-        low_conf_count = self.ocr_repo.get_low_confidence_count(document_id, tenant_id, threshold=0.95)
+        low_conf_count = self.ocr_repo.get_low_confidence_count(
+            document_id, tenant_id, threshold=0.95
+        )
         if low_conf_count > 0:
             doc.pipeline_status = "blocked"
             doc.block_reason = f"存在 {low_conf_count} 个低置信度 OCR 字段未复核"
@@ -509,15 +513,17 @@ class DocumentParseService:
 
         # Refresh document to get updated pipeline status
         self.db.refresh(doc)
-        low_conf_count = self.ocr_repo.get_low_confidence_count(document_id, tenant_id, threshold=0.95)
+        low_conf_count = self.ocr_repo.get_low_confidence_count(
+            document_id, tenant_id, threshold=0.95
+        )
 
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         return {
             "field_id": field_id,
             "review_status": "confirmed",
             "reviewed_by": reviewer,
-            "reviewed_at": datetime.now(timezone.utc).isoformat(),
+            "reviewed_at": datetime.now(UTC).isoformat(),
             "pipeline_status": doc.pipeline_status,
             "block_reason": doc.block_reason,
             "all_confirmed": low_conf_count == 0,

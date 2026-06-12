@@ -223,7 +223,9 @@ _EXCEPTION_STATUS_CODES: dict[str, int] = {
 }
 
 
-async def modu_exception_handler(request: Request, exc: ModuException) -> JSONResponse:
+async def modu_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    if not isinstance(exc, ModuException):
+        raise exc
     status_code = _EXCEPTION_STATUS_CODES.get(exc.error_code, 400)
     return JSONResponse(
         status_code=status_code,

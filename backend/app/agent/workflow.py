@@ -5,8 +5,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
+from app.agent.checklist import ChecklistValidator
 from app.integrations.llm_client import LLMClient, LLMInvocationError, LLMOutputFormatError
 from app.integrations.template_loader import TemplateLoader
 
@@ -114,7 +115,7 @@ class AgentWorkflowEngine:
         self,
         steps: list[Step],
         llm_client: LLMClient,
-        checklist_validator: "ChecklistValidator | None" = None,
+        checklist_validator: ChecklistValidator | None = None,
         max_retry: int = MAX_RETRY_PER_STEP,
     ) -> None:
         self.steps = steps
@@ -125,7 +126,7 @@ class AgentWorkflowEngine:
     def run(
         self,
         context: WorkflowContext,
-        on_step_complete: "callable | None" = None,
+        on_step_complete: Callable[[str, StepRecord], None] | None = None,
     ) -> dict[str, StepRecord]:
         """
         Execute all steps sequentially.

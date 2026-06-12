@@ -20,11 +20,14 @@ def _load_markdown_file(path: Path) -> str:
         return ""
 
 
-def _load_json_file(path: Path) -> dict[str, Any]:
+def _load_json_file(path: Path) -> dict[str, Any] | list[Any]:
     """Parse a JSON file; return empty dict on failure."""
     try:
         with path.open("r", encoding="utf-8") as fh:
-            return json.load(fh)
+            data = json.load(fh)
+            if isinstance(data, (dict, list)):
+                return data
+            return {}
     except (OSError, json.JSONDecodeError):
         logger.warning("Failed to parse JSON file: %s", path)
         return {}

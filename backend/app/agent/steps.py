@@ -310,7 +310,7 @@ class HierarchyResolutionStep(Step):
             return []
         return [str(v).strip() for v in val if v]
 
-    def _normalize_tree(self, nodes: list[dict]) -> list[dict]:
+    def _normalize_tree(self, nodes: list[Any]) -> list[dict]:
         """Recursively normalize requirement tree nodes."""
         result = []
         for node in nodes:

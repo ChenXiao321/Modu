@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 from abc import ABC, abstractmethod
+from typing import cast
 
 from app.integrations.template_loader import TemplateLoader
 
@@ -89,6 +90,11 @@ class LLMClient(ABC):
         """
         ...
 
+    @abstractmethod
+    def _call(self, messages: list[dict], temperature: float | None = None) -> str:
+        """Call the underlying LLM with messages and return raw text content."""
+        ...
+
 
 class MockLLMClient(LLMClient):
     """
@@ -104,7 +110,7 @@ class MockLLMClient(LLMClient):
     def _render_json(self, template_name: str, **context: object) -> list[dict] | dict:
         """Render a template and parse the resulting JSON."""
         raw = TemplateLoader.render(template_name, **context)
-        return json.loads(raw)
+        return cast(list[dict] | dict, json.loads(raw))
 
     def extract_requirements(self, document_text: str, filename: str) -> list[dict]:
         seed = self._make_seed(document_text, filename)
@@ -418,10 +424,11 @@ class LiteLLMClient(LLMClient):
 
         try:
             response = completion(**kwargs)
-            content = (
+            content = cast(
+                str,
                 response.get("choices", [{}])[0]
                 .get("message", {})
-                .get("content", "")
+                .get("content", ""),
             )
             if not content:
                 raise LLMInvocationError("LLM returned empty content")
@@ -434,7 +441,7 @@ class LiteLLMClient(LLMClient):
         """Parse JSON from LLM response, with fallback cleaning."""
         # Try direct parse first
         try:
-            return json.loads(raw)
+            return cast(dict | list, json.loads(raw))
         except json.JSONDecodeError:
             pass
 
@@ -444,7 +451,7 @@ class LiteLLMClient(LLMClient):
             end = raw.find("```", start)
             if end != -1:
                 try:
-                    return json.loads(raw[start:end].strip())
+                    return cast(dict | list, json.loads(raw[start:end].strip()))
                 except json.JSONDecodeError:
                     pass
         elif "```" in raw:
@@ -452,7 +459,7 @@ class LiteLLMClient(LLMClient):
             end = raw.find("```", start)
             if end != -1:
                 try:
-                    return json.loads(raw[start:end].strip())
+                    return cast(dict | list, json.loads(raw[start:end].strip()))
                 except json.JSONDecodeError:
                     pass
 

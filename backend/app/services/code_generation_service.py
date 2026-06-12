@@ -37,10 +37,11 @@ class CodeGenerationService:
         self.doc_repo = DocumentRepository(db)
         self.sdd_repo = SoftwareDetailedDesignRepository(db)
         self.code_repo = GeneratedCodeFileRepository(db)
+        self.llm_client: LLMClient
         if llm_client is not None:
-            self.llm_client: LLMClient = llm_client
+            self.llm_client = llm_client
         elif settings.llm_provider == "litellm":
-            self.llm_client: LLMClient = LiteLLMClient(
+            self.llm_client = LiteLLMClient(
                 model=settings.llm_model,
                 api_key=settings.llm_api_key,
                 base_url=settings.llm_base_url or None,
@@ -48,7 +49,7 @@ class CodeGenerationService:
                 max_tokens=settings.llm_max_tokens,
             )
         else:
-            self.llm_client: LLMClient = MockLLMClient()
+            self.llm_client = MockLLMClient()
 
     def trigger_generate(self, tenant_id: int, document_id: str) -> dict:
         # Lock the document row to prevent concurrent triggers (TOCTOU protection)
