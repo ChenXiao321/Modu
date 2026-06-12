@@ -45,7 +45,7 @@ def client(test_db):
 class TestSafetyParametersIntegration:
     def test_get_safety_parameters_document_not_found(self, client, test_db):
         response = client.get(
-            "/api/v1/documents/nonexistent/safety-parameters", headers={"X-Tenant-ID": "1"}
+            "/api/v1/documents/2c5ff810-c8b8-486e-abb8-4ace7556e79d/safety-parameters", headers={"X-Tenant-ID": "1"}
         )
         assert response.status_code == 404
         data = response.json()

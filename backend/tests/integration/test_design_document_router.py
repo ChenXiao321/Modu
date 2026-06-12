@@ -78,7 +78,7 @@ class TestDesignDocumentEndpoints:
 
     def test_trigger_design_document_not_found(self, client):
         res = client.post(
-            "/api/v1/documents/nonexistent-id/design",
+            "/api/v1/documents/8e16dbb9-e991-4750-9030-bb3a00245e86/design",
             headers={"X-Tenant-ID": "1"},
         )
         assert res.status_code == 404
@@ -172,7 +172,7 @@ class TestDesignDocumentEndpoints:
 
     def test_get_design_document_not_found(self, client):
         res = client.get(
-            "/api/v1/documents/nonexistent-id/design",
+            "/api/v1/documents/8e16dbb9-e991-4750-9030-bb3a00245e86/design",
             headers={"X-Tenant-ID": "1"},
         )
         assert res.status_code == 404

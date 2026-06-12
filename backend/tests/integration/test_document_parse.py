@@ -127,7 +127,7 @@ class TestParseFlow:
 
     def test_parse_nonexistent_document(self, client):
         res = client.post(
-            "/api/v1/documents/nonexistent/parse",
+            "/api/v1/documents/2c5ff810-c8b8-486e-abb8-4ace7556e79d/parse",
             headers={"X-Tenant-ID": "1"},
         )
         assert res.status_code == 404

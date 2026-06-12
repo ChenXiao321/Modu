@@ -77,7 +77,7 @@ class TestOcrResultsEndpoint:
         assert all("confidence" in f for f in data["fields"])
 
     def test_get_ocr_results_not_found(self, client):
-        res = client.get("/api/v1/documents/nonexistent/ocr-results")
+        res = client.get("/api/v1/documents/2c5ff810-c8b8-486e-abb8-4ace7556e79d/ocr-results")
         assert res.status_code == 404
         assert res.json()["error"]["code"] == "DOCUMENT_NOT_FOUND"
 

@@ -139,6 +139,22 @@ class TestCodeGeneration:
         assert "#ifndef" in header_files[0].content
         assert '#include "' in source_files[0].content
 
+        # Verify traceability and template version are embedded
+        all_contents = " ".join([f.content for f in files])
+        assert "/* TEMPLATE-VERSION:" in all_contents
+        assert "/* TRACE-ID:" in all_contents
+        assert "MCAL_SPI_READ" in all_contents or "McSpiReadFn" in all_contents
+
+        # Verify new DB fields are populated
+        assert files[0].template_version == "1.0.0"
+        assert files[0].naming_convention == "mixed"
+        assert files[0].polarion_trace_id is not None
+
+        # Verify ASIL annotations and safety mechanisms are embedded
+        assert "/* ASIL-LEVEL:" in all_contents
+        assert "WDG_REFRESH" in all_contents or "SAFETY_MONITOR" in all_contents
+        assert files[0].asil_level == "B"
+
     def test_trigger_code_generation_invalid_status(self, client, test_db):
         doc = Document(
             tenant_id=1,
@@ -164,7 +180,7 @@ class TestCodeGeneration:
 
     def test_trigger_code_generation_document_not_found(self, client):
         res = client.post(
-            "/api/v1/documents/nonexistent-id/code-generation",
+            "/api/v1/documents/8e16dbb9-e991-4750-9030-bb3a00245e86/code-generation",
             headers={"X-Tenant-ID": "1"},
         )
         assert res.status_code == 404
@@ -194,10 +210,15 @@ class TestCodeGeneration:
         data = res.json()["data"]
         assert data["document_id"] == doc.id
         assert len(data["files"]) >= 2
+        for f in data["files"]:
+            assert "template_version" in f
+            assert "naming_convention" in f
+            assert f["template_version"] is not None
+            assert f["naming_convention"] is not None
 
     def test_get_code_files_document_not_found(self, client):
         res = client.get(
-            "/api/v1/documents/nonexistent-id/code-files",
+            "/api/v1/documents/8e16dbb9-e991-4750-9030-bb3a00245e86/code-files",
             headers={"X-Tenant-ID": "1"},
         )
         assert res.status_code == 404
@@ -235,11 +256,15 @@ class TestCodeGeneration:
         assert data["id"] == file_id
         assert data["content"] is not None
         assert data["file_path"] is not None
+        assert data["polarion_trace_id"] is not None
+        assert data["template_version"] == "1.0.0"
+        assert data["naming_convention"] == "mixed"
+        assert data["asil_level"] == "B"
 
     def test_get_code_file_not_found(self, client, test_db):
         doc = self._seed_doc_with_design_reviewed(test_db)
         res = client.get(
-            f"/api/v1/documents/{doc.id}/code-files/nonexistent",
+            f"/api/v1/documents/{doc.id}/code-files/2c5ff810-c8b8-486e-abb8-4ace7556e79d",
             headers={"X-Tenant-ID": "1"},
         )
         assert res.status_code == 404

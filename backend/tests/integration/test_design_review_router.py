@@ -99,7 +99,7 @@ class TestDesignReviewRouter:
 
     def test_get_design_review_document_not_found(self, client):
         res = client.get(
-            "/api/v1/documents/nonexistent-id/design-review",
+            "/api/v1/documents/8e16dbb9-e991-4750-9030-bb3a00245e86/design-review",
             headers={"X-Tenant-ID": "1"},
         )
         assert res.status_code == 404
@@ -287,7 +287,7 @@ class TestDesignReviewRouter:
     def test_resolve_review_comment_not_found(self, client, test_db):
         doc, design = self._seed_doc_and_design(test_db)
         res = client.patch(
-            f"/api/v1/documents/{doc.id}/review-comments/nonexistent/resolve",
+            f"/api/v1/documents/{doc.id}/review-comments/2c5ff810-c8b8-486e-abb8-4ace7556e79d/resolve",
             json={"resolved_by": "李四"},
             headers={"X-Tenant-ID": "1"},
         )
@@ -357,7 +357,7 @@ class TestDesignReviewRouter:
     def test_rollback_to_revision_not_found(self, client, test_db):
         doc, design = self._seed_doc_and_design(test_db)
         res = client.post(
-            f"/api/v1/documents/{doc.id}/design-revisions/nonexistent/rollback",
+            f"/api/v1/documents/{doc.id}/design-revisions/2c5ff810-c8b8-486e-abb8-4ace7556e79d/rollback",
             json={"author": "李四"},
             headers={"X-Tenant-ID": "1"},
         )
