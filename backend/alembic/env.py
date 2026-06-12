@@ -1,10 +1,8 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
-
 from app.config import settings
 
 # this is the Alembic Config object, which provides
@@ -20,8 +18,8 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import all models so autogenerate can discover them.
-from app.models.base import Base  # noqa: E402
 from app.models.agent_workflow_run import AgentWorkflowRun  # noqa: E402, F401
+from app.models.base import Base  # noqa: E402
 from app.models.design_document import DesignDocument  # noqa: E402, F401
 from app.models.design_revision import DesignRevision  # noqa: E402, F401
 from app.models.document import Document  # noqa: E402, F401

@@ -157,7 +157,7 @@ def get_memmap_header_content(module_name, author_name, date, template_version="
     #undef {module_name.upper()}_MEMMAP_ERROR
 
 #elif defined {module_name.upper()}_CLEAR_FAR_DATA_ALIGN4_STOP
-    #pragma section 
+    #pragma section
     #undef {module_name.upper()}_CLEAR_FAR_DATA_ALIGN4_STOP
     #undef {module_name.upper()}_MEMMAP_ERROR
 
@@ -167,7 +167,7 @@ def get_memmap_header_content(module_name, author_name, date, template_version="
     #undef {module_name.upper()}_MEMMAP_ERROR
 
 #elif defined {module_name.upper()}_CONST_FAR_DATA_ALIGN4_STOP
-    #pragma section 
+    #pragma section
     #undef {module_name.upper()}_CONST_FAR_DATA_ALIGN4_STOP
     #undef {module_name.upper()}_MEMMAP_ERROR
 
@@ -187,7 +187,7 @@ def get_memmap_header_content(module_name, author_name, date, template_version="
     #undef {module_name.upper()}_MEMMAP_ERROR
 
 #elif defined {module_name.upper()}_CODE_STOP
-    #pragma section 
+    #pragma section
     #undef {module_name.upper()}_CODE_STOP
     #undef {module_name.upper()}_MEMMAP_ERROR
 

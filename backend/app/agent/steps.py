@@ -2,12 +2,11 @@
 
 import json
 import logging
-import re
 from pathlib import Path
 from typing import Any
 
 from app.agent.workflow import Step, WorkflowContext
-from app.integrations.llm_client import LLMClient, LLMOutputFormatError
+from app.integrations.llm_client import LLMOutputFormatError
 from app.integrations.template_loader import TemplateLoader
 
 logger = logging.getLogger(__name__)
@@ -20,7 +19,12 @@ def _truncate_document_text(text: str, max_len: int = _MAX_DOCUMENT_TEXT_LEN) ->
     if len(text) <= max_len:
         return text
     half = max_len // 2
-    return text[:half] + f"\n\n...[{{truncated}} {len(text) - max_len} chars omitted]...\n\n" + text[-half:]
+    omitted = len(text) - max_len
+    return (
+        text[:half]
+        + f"\n\n...[{{truncated}} {omitted} chars omitted]...\n\n"
+        + text[-half:]
+    )
 
 
 def _clean_json_response(raw: str) -> str:
@@ -571,14 +575,20 @@ class CodeSourceGenerationStep(Step):
 
             if not file_path or not file_type or content is None:
                 raise LLMOutputFormatError(
-                    f"code_02_code_generation: file at index {idx} missing file_path, file_type, or content",
+                    (
+                        f"code_02_code_generation: file at index {idx} "
+                        "missing file_path, file_type, or content"
+                    ),
                     raw_response=raw,
                 )
 
             file_type = str(file_type).lower()
             if file_type not in ("header", "source"):
                 raise LLMOutputFormatError(
-                    f"code_02_code_generation: file at index {idx} has invalid file_type '{file_type}'",
+                    (
+                        f"code_02_code_generation: file at index {idx} "
+                        f"has invalid file_type '{file_type}'"
+                    ),
                     raw_response=raw,
                 )
 

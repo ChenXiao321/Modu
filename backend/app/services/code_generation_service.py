@@ -3,8 +3,6 @@ import logging
 import os
 import re
 import tempfile
-import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -18,7 +16,7 @@ from app.exceptions import (
     DocumentNotReadyError,
     PipelineStatusInvalidError,
 )
-from app.integrations.llm_client import LLMClient, LiteLLMClient, MockLLMClient
+from app.integrations.llm_client import LiteLLMClient, LLMClient, MockLLMClient
 from app.models.document import Document
 from app.models.generated_code_file import GeneratedCodeFile
 from app.repositories.document_repository import DocumentRepository
@@ -145,14 +143,16 @@ class CodeGenerationService:
             # Step 1: Generate FC framework using deterministic templates
             generator = CodeGenerator()
             with tempfile.TemporaryDirectory() as tmpdir:
-                generator.generate_files(module_name, author, tmpdir, template_version=template_version)
+                generator.generate_files(
+                    module_name, author, tmpdir, template_version=template_version
+                )
                 module_dir = os.path.join(tmpdir, module_name)
 
                 # Read framework content
                 framework: dict[str, str] = {}
                 for filename in sorted(os.listdir(module_dir)):
                     filepath = os.path.join(module_dir, filename)
-                    with open(filepath, "r", encoding="utf-8") as f:
+                    with open(filepath, encoding="utf-8") as f:
                         framework[filename] = f.read()
 
             # Step 2: Construct design text including FC framework

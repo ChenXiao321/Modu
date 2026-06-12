@@ -1,5 +1,6 @@
-import pytest
+from pathlib import Path
 
+from app.agent.steps import CodeSourceGenerationStep, build_code_generation_steps
 from app.services.code_generation_service import CodeGenerationService
 
 
@@ -125,8 +126,6 @@ class TestCodeGenerationService:
 
     def test_build_code_generation_steps_with_config(self):
         """Verify build_code_generation_steps accepts config parameters."""
-        from pathlib import Path
-        from app.agent.steps import build_code_generation_steps
 
         template_dir = Path(__file__).parent.parent.parent / "app" / "agent" / "prompts"
         steps = build_code_generation_steps(
@@ -137,7 +136,6 @@ class TestCodeGenerationService:
         )
         assert len(steps) == 2
         # Verify the second step (CodeSourceGenerationStep) carries config
-        from app.agent.steps import CodeSourceGenerationStep
 
         assert isinstance(steps[1], CodeSourceGenerationStep)
         assert steps[1].template_version == "2.0.0"
@@ -146,17 +144,17 @@ class TestCodeGenerationService:
 
     def test_build_code_generation_steps_with_asil(self):
         """Verify build_code_generation_steps accepts ASIL parameters."""
-        from pathlib import Path
-        from app.agent.steps import build_code_generation_steps
 
         template_dir = Path(__file__).parent.parent.parent / "app" / "agent" / "prompts"
         steps = build_code_generation_steps(
             template_dir,
             asil_level="B",
-            asil_context={"fc_asil_mapping": {"FC-001": "B"}, "coverage_targets": {"statement": 90}},
+            asil_context={
+                "fc_asil_mapping": {"FC-001": "B"},
+                "coverage_targets": {"statement": 90},
+            },
         )
         assert len(steps) == 2
-        from app.agent.steps import CodeSourceGenerationStep
 
         assert isinstance(steps[1], CodeSourceGenerationStep)
         assert steps[1].asil_level == "B"

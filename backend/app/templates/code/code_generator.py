@@ -7,14 +7,15 @@ Contains functions for generating C code files based on templates
 
 import os
 from datetime import datetime
+
 from .c_template import get_c_source_content
-from .h_template import get_header_content
 from .cali_template import get_cali_content
 from .callout_template import get_callout_content
 from .callouth_template import get_callout_header_content
-from .cfg_template import get_cfg_content
 from .cfg_h_template import get_cfg_header_content
+from .cfg_template import get_cfg_content
 from .cfgdata_h_template import get_cfgdata_header_content
+from .h_template import get_header_content
 from .memmap_h_template import get_memmap_header_content
 from .types_h_template import get_types_header_content
 

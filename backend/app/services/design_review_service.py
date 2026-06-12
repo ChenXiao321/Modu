@@ -1,7 +1,8 @@
 import copy
 import difflib
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -28,6 +29,8 @@ from app.repositories.requirement_repository import RequirementRepository
 from app.repositories.review_comment_repository import ReviewCommentRepository
 from app.repositories.safety_parameter_repository import SafetyParameterRepository
 from app.repositories.software_detailed_design_repository import SoftwareDetailedDesignRepository
+
+logger = logging.getLogger(__name__)
 
 _VALID_SECTION_KEYS = {
     "overview",
@@ -111,7 +114,10 @@ class DesignReviewService:
 
     @staticmethod
     def _validate_author(author: str) -> str:
-        """Validate and normalize author. Returns stripped author or raises AuthorValidationError."""
+        """Validate and normalize author.
+
+        Returns stripped author or raises AuthorValidationError.
+        """
         stripped = author.strip()
         if not stripped:
             raise AuthorValidationError("作者不能为空")
@@ -132,8 +138,11 @@ class DesignReviewService:
         design = self._get_completed_design(tenant_id, document_id, lock=True)
         sections = copy.deepcopy(design.sections) if design.sections else {}
         current_section = sections.get(section_key, {})
-        original_content = current_section.get("content", "") if isinstance(current_section, dict) else ""
-
+        original_content = (
+            current_section.get("content", "")
+            if isinstance(current_section, dict)
+            else ""
+        )
         revision = DesignRevision(
             id=str(uuid.uuid4()),
             tenant_id=tenant_id,
@@ -153,8 +162,15 @@ class DesignReviewService:
                 "content": revised_content.strip(),
             }
         else:
-            trace_id = current_section.get("polarion_trace_id", "") if isinstance(current_section, dict) else ""
-            sections[section_key] = {"content": revised_content.strip(), "polarion_trace_id": trace_id}
+            trace_id = (
+                current_section.get("polarion_trace_id", "")
+                if isinstance(current_section, dict)
+                else ""
+            )
+            sections[section_key] = {
+                "content": revised_content.strip(),
+                "polarion_trace_id": trace_id,
+            }
         design.sections = dict(sections)
         self.db.commit()
         self.db.refresh(revision)
@@ -324,7 +340,7 @@ class DesignReviewService:
         return {
             "document_id": document_id,
             "pipeline_status": doc.pipeline_status,
-            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "submitted_at": datetime.now(UTC).isoformat(),
         }
 
     def rollback_to_revision(
@@ -340,8 +356,11 @@ class DesignReviewService:
         design = self._get_completed_design(tenant_id, document_id, lock=True)
         sections = copy.deepcopy(design.sections) if design.sections else {}
         current_section = sections.get(revision.section_key, {})
-        current_content = current_section.get("content", "") if isinstance(current_section, dict) else ""
-
+        current_content = (
+            current_section.get("content", "")
+            if isinstance(current_section, dict)
+            else ""
+        )
         # Create a new revision record for the rollback action
         rollback_revision = DesignRevision(
             id=str(uuid.uuid4()),
@@ -362,7 +381,11 @@ class DesignReviewService:
                 "content": revision.original_content,
             }
         else:
-            trace_id = current_section.get("polarion_trace_id", "") if isinstance(current_section, dict) else ""
+            trace_id = (
+                current_section.get("polarion_trace_id", "")
+                if isinstance(current_section, dict)
+                else ""
+            )
             sections[revision.section_key] = {
                 "content": revision.original_content,
                 "polarion_trace_id": trace_id,
@@ -378,10 +401,16 @@ class DesignReviewService:
             "original_content": current_content,
             "revised_content": revision.original_content,
             "author": author,
-            "created_at": rollback_revision.created_at.isoformat() if rollback_revision.created_at else None,
+            "created_at": (
+                rollback_revision.created_at.isoformat()
+                if rollback_revision.created_at
+                else None
+            ),
         }
 
-    def _get_completed_design(self, tenant_id: int, document_id: str, lock: bool = False) -> DesignDocument:
+    def _get_completed_design(
+        self, tenant_id: int, document_id: str, lock: bool = False
+    ) -> DesignDocument:
         query = self.db.query(DesignDocument).filter(
             DesignDocument.document_id == document_id,
             DesignDocument.tenant_id == tenant_id,
