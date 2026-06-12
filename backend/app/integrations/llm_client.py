@@ -319,52 +319,52 @@ class MockLLMClient(LLMClient):
                         {
                             "file_path": "src/MockModule.h",
                             "file_type": "header",
-                            "content": "/* TRACE-ID: POL-CODE-001 */\n#ifndef MOCKMODULE_H_\n#define MOCKMODULE_H_\n\n#include <Std_Types.h>\n\nvoid MockModule_Init(void);\nStd_ReturnType MockModule_Run(void);\n\n#endif /* MOCKMODULE_H_ */\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-001 */\n#ifndef MOCKMODULE_H_\n#define MOCKMODULE_H_\n\n#include <Std_Types.h>\n\n/* External Interface Access Layer (for Mock testing) */\n#define MCAL_SPI_READ(channel, data, length)          Spi_Read(channel, data, length)\n#define MCAL_CAN_WRITE(hth, pduInfo)                  Can_Write(hth, pduInfo)\n#define OS_SET_REL_ALARM(alarm, increment, cycle)     SetRelAlarm(alarm, increment, cycle)\n\n/* ASIL Safety Mechanism Access Layer */\n#define WDG_REFRESH()                                   WdgM_RefreshTrigger()\n#define SAFETY_MONITOR(condition, errorId)              ((condition) ? (void)0 : SafetyMonitor_ReportError(errorId))\n#define REDUNDANCY_CHECK(valueA, valueB, tolerance)     (((valueA) >= (valueB) - (tolerance)) && ((valueA) <= (valueB) + (tolerance)))\n\nvoid MockModule_Init(void);\nStd_ReturnType MockModule_Run(void);\n\n#endif /* MOCKMODULE_H_ */\n",
                         },
                         {
                             "file_path": "src/MockModule.c",
                             "file_type": "source",
-                            "content": "/* TRACE-ID: POL-CODE-002 */\n#include \"MockModule.h\"\n\nvoid MockModule_Init(void)\n{\n    /* TODO: implementation */\n}\n\nStd_ReturnType MockModule_Run(void)\n{\n    /* TODO: implementation */\n    return E_OK;\n}\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-002 */\n#include \"MockModule.h\"\n\n/* External interface function pointers for unit test mocking */\nStd_ReturnType (*McSpiReadFn)(uint8 channel, uint8* data, uint16 length) = NULL_PTR;\nStd_ReturnType (*McCanWriteFn)(uint8 hth, const Can_PduType* pduInfo) = NULL_PTR;\n\n/* TRACE-ID: SW-REQ-001 */\n/* ASIL-LEVEL: B */\n/* COVERAGE-TARGET: statement=90%, branch=80%, MC/DC=50% */\nvoid MockModule_Init(void)\n{\n    /* TODO: implementation */\n    WDG_REFRESH();\n}\n\n/* TRACE-ID: SW-REQ-002 */\n/* ASIL-LEVEL: B */\n/* COVERAGE-TARGET: statement=90%, branch=80%, MC/DC=50% */\nStd_ReturnType MockModule_Run(void)\n{\n    /* TODO: implementation */\n    SAFETY_MONITOR(TRUE, 0);\n    WDG_REFRESH();\n    return E_OK;\n}\n",
                         },
                         {
                             "file_path": "src/MockModule_Types.h",
                             "file_type": "header",
-                            "content": "/* TRACE-ID: POL-CODE-003 */\n#ifndef MOCKMODULE_TYPES_H_\n#define MOCKMODULE_TYPES_H_\n\n#include \"MockModule_CfgData.h\"\n\ntypedef uint8 MockModule_InitStuType;\n\n#endif /* MOCKMODULE_TYPES_H_ */\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-003 */\n#ifndef MOCKMODULE_TYPES_H_\n#define MOCKMODULE_TYPES_H_\n\n#include \"MockModule_CfgData.h\"\n\ntypedef uint8 MockModule_InitStuType;\n\n#endif /* MOCKMODULE_TYPES_H_ */\n",
                         },
                         {
                             "file_path": "src/MockModule_Cfg.c",
                             "file_type": "source",
-                            "content": "/* TRACE-ID: POL-CODE-004 */\n#include \"MockModule_CfgData.h\"\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-004 */\n#include \"MockModule_CfgData.h\"\n",
                         },
                         {
                             "file_path": "src/MockModule_Cfg.h",
                             "file_type": "header",
-                            "content": "/* TRACE-ID: POL-CODE-005 */\n#ifndef MOCKMODULE_CFG_H_\n#define MOCKMODULE_CFG_H_\n\n#endif /* MOCKMODULE_CFG_H_ */\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-005 */\n#ifndef MOCKMODULE_CFG_H_\n#define MOCKMODULE_CFG_H_\n\n#endif /* MOCKMODULE_CFG_H_ */\n",
                         },
                         {
                             "file_path": "src/MockModule_CfgData.h",
                             "file_type": "header",
-                            "content": "/* TRACE-ID: POL-CODE-006 */\n#ifndef MOCKMODULE_CFGDATA_H_\n#define MOCKMODULE_CFGDATA_H_\n\n#endif /* MOCKMODULE_CFGDATA_H_ */\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-006 */\n#ifndef MOCKMODULE_CFGDATA_H_\n#define MOCKMODULE_CFGDATA_H_\n\n#endif /* MOCKMODULE_CFGDATA_H_ */\n",
                         },
                         {
                             "file_path": "src/MockModule_Cali.c",
                             "file_type": "source",
-                            "content": "/* TRACE-ID: POL-CODE-007 */\n#include \"MockModule_CfgData.h\"\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-007 */\n#include \"MockModule_CfgData.h\"\n",
                         },
                         {
                             "file_path": "src/MockModule_Callout.c",
                             "file_type": "source",
-                            "content": "/* TRACE-ID: POL-CODE-008 */\n#include \"MockModule_Callout.h\"\n\nboolean MockModule_CalloutInit(void)\n{\n    boolean FuncCompl_b = TRUE;\n    return (FuncCompl_b);\n}\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-008 */\n#include \"MockModule_Callout.h\"\n\n/* TRACE-ID: SW-REQ-003 */\n/* ASIL-LEVEL: B */\n/* COVERAGE-TARGET: statement=90%, branch=80%, MC/DC=50% */\nboolean MockModule_CalloutInit(void)\n{\n    boolean FuncCompl_b = TRUE;\n    WDG_REFRESH();\n    return (FuncCompl_b);\n}\n",
                         },
                         {
                             "file_path": "src/MockModule_Callout.h",
                             "file_type": "header",
-                            "content": "/* TRACE-ID: POL-CODE-009 */\n#ifndef MOCKMODULE_CALLOUT_H_\n#define MOCKMODULE_CALLOUT_H_\n\n#endif /* MOCKMODULE_CALLOUT_H_ */\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-009 */\n#ifndef MOCKMODULE_CALLOUT_H_\n#define MOCKMODULE_CALLOUT_H_\n\n#endif /* MOCKMODULE_CALLOUT_H_ */\n",
                         },
                         {
                             "file_path": "src/MockModule_MemMap.h",
                             "file_type": "header",
-                            "content": "/* TRACE-ID: POL-CODE-010 */\n#ifndef MOCKMODULE_MEMMAP_H_\n#define MOCKMODULE_MEMMAP_H_\n\n#endif /* MOCKMODULE_MEMMAP_H_ */\n",
+                            "content": "/* TEMPLATE-VERSION: 1.0.0 */\n/* TRACE-ID: POL-CODE-010 */\n#ifndef MOCKMODULE_MEMMAP_H_\n#define MOCKMODULE_MEMMAP_H_\n\n#endif /* MOCKMODULE_MEMMAP_H_ */\n",
                         },
                     ]
                 },

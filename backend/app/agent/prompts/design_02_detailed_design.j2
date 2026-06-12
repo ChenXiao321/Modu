@@ -53,7 +53,8 @@ FC 识别结果:
           "purpose": "函数目的",
           "algorithm": "算法实现步骤描述（或流程图文本表示）",
           "data_structures": [{"name": "结构体/变量名", "type": "类型", "description": "描述"}],
-          "cyclomatic_complexity": "预估圈复杂度"
+          "cyclomatic_complexity": "预估圈复杂度",
+          "assigned_requirements": ["SW-REQ-001", "SW-REQ-002"]
         }
       ]
     }
@@ -74,4 +75,5 @@ FC 识别结果:
 2. 算法实现步骤必须具体、可验证，不能是空泛描述
 3. ASIL-C/D 的 FC 必须包含冗余设计说明和 FMEA 参考
 4. 圈复杂度：手写代码 < 15，模型开发 < 50
-5. 只输出 JSON，不要任何解释文字
+5. 每个函数必须列出其实现的上游需求 ID（assigned_requirements）；若函数未直接对应任何需求，留空数组 []
+6. 只输出 JSON，不要任何解释文字

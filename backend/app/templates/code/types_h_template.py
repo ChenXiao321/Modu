@@ -8,7 +8,7 @@ Contains template for types header file
 from datetime import datetime
 
 
-def get_types_header_content(module_name, author_name, date):
+def get_types_header_content(module_name, author_name, date, template_version="1.0.0"):
     """Get content for types header file"""
     current_year = datetime.now().year
     return f'''/***********************************************************************************************************************
@@ -25,6 +25,7 @@ def get_types_header_content(module_name, author_name, date):
 * $Name______: {module_name}_Types.h$
 * $ArchiVer__: 1$
 * $FcVeri____: 1.0.0$
+* $TemplateVer: {template_version}$
 * $Author____: {author_name}$
 **
 **--------------------------------------------------------------------------------------------------------------------**

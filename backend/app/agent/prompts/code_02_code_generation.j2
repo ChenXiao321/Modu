@@ -11,6 +11,16 @@
 {}
 {% endif %}
 
+代码生成配置：
+- 模板版本: {{ template_version }}
+- 命名风格: {{ naming_convention }}
+- 需求追溯映射（函数名 → 需求ID列表）: {{ trace_mapping | tojson }}
+
+ASIL 等级配置：
+- 模块级 ASIL: {{ asil_level }}
+- FC 级 ASIL 映射: {{ asil_context.fc_asil_mapping | tojson }}
+- 覆盖率目标: {{ asil_context.coverage_targets_display or "无额外覆盖率要求" }}
+
 任务：
 请基于上述 FC 框架和设计文档，生成完整的 10 个文件。
 
@@ -20,9 +30,20 @@
 3. 替换示例性类型定义为设计文档中定义的类型（基于 detailed_design）
 4. 替换配置数据为设计文档中定义的值（基于 detailed_design）
 5. 保留防御性编程框架（CheckArgIn、错误检测、#if CFG_DEV_ERROR_DETECT）
-6. 文件头注释包含 ASPICE 追溯标识占位符格式：/* TRACE-ID: POL-CODE-{seq:03d} */
-7. 所有宏定义使用全大写蛇形命名，函数使用 PascalCase（如 WdgM_Init）
-8. 源文件内容中的换行符必须使用 \\n 转义，禁止在 JSON 字符串值内直接出现未转义的换行
+6. 函数头注释必须包含其对应的需求追溯 ID：/* TRACE-ID: {requirement_id} */。追溯映射关系见上文 `trace_mapping`。若一个函数对应多个需求，用逗号分隔列出所有 ID
+7. {% if naming_convention == "camelCase" %}函数和变量均使用 camelCase 命名（如 wdgMInit），宏定义使用全大写蛇形命名（如 WDGM_CFG_DEV_ERROR_DETECT）{% elif naming_convention == "snake_case" %}函数和变量均使用 snake_case 命名（如 wdgm_init），宏定义使用全大写蛇形命名（如 WDGM_CFG_DEV_ERROR_DETECT）{% else %}函数使用 PascalCase（如 WdgM_Init），变量使用 snake_case 并带匈牙利后缀（如 Cnt_u32、ConditionA_b），宏定义使用全大写蛇形命名（如 WDGM_CFG_DEV_ERROR_DETECT）{% endif %}
+8. 源文件内容中的换行符必须使用 \n 转义，禁止在 JSON 字符串值内直接出现未转义的换行
+9. 文件头注释（版权头下方）必须包含模块级追溯和模板版本：
+   /* MODULE-TRACE-ID: POL-CODE-MODULE */
+   /* TEMPLATE-VERSION: {{ template_version }} */
+10. 所有外部接口调用（MCAL、OS、其他 CDD）必须通过预定义宏接入，禁止直接调用原始函数名。例如使用 MCAL_SPI_READ(...) 而非 Spi_Read(...)。FC 框架头文件中已预定义外部接口接入层宏，请在实现中统一使用这些宏。
+11. 根据 ASIL 等级在代码中注入对应安全机制：
+    - ASIL-A：基本防御性编程（参数范围检查、空指针检查）
+    - ASIL-B：增加边界检查、错误处理、看门狗喂狗调用（使用 WDG_REFRESH() 宏）
+    - ASIL-C/D：增加冗余检查（双通道比较）、安全监控（使用 SAFETY_MONITOR() 宏）、FMEA 追溯注释、看门狗喂狗
+12. 在每个关键函数的文件头注释中标注该函数对应的 ASIL 等级和覆盖率目标，覆盖率目标使用上文注入的格式，例如 ASIL-B：
+    /* ASIL-LEVEL: B */
+    /* COVERAGE-TARGET: statement=90%, branch=80%, MC/DC=50% */
 
 请严格输出 JSON 对象，不要包含任何解释文字或 markdown 代码块。JSON 结构如下：
 {

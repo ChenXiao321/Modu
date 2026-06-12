@@ -8,7 +8,7 @@ Contains template for .c source file
 from datetime import datetime
 
 
-def get_c_source_content(module_name, author_name, date):
+def get_c_source_content(module_name, author_name, date, template_version="1.0.0"):
     """Get content for .c source file"""
     current_year = datetime.now().year
     return f'''/***********************************************************************************************************************
@@ -25,6 +25,7 @@ def get_c_source_content(module_name, author_name, date):
 * $Name______: {module_name}.c$
 * $ArchiVer__: 1$
 * $FcVeri____: 1.0.0$
+* $TemplateVer: {template_version}$
 * $Author____: {author_name}$
 **
 **--------------------------------------------------------------------------------------------------------------------**
@@ -43,8 +44,17 @@ def get_c_source_content(module_name, author_name, date):
 #include "{module_name}_Callout.h"
 
 /***********************************************************************************************************************
-**                        				Macro Definition                        								      **
+**							External Interface Function Pointers (for unit test mocking)							  **/
 ***********************************************************************************************************************/
+Std_ReturnType (*McSpiReadFn)(uint8 channel, uint8* data, uint16 length) = NULL_PTR;
+Std_ReturnType (*McCanWriteFn)(uint8 hth, const Can_PduType* pduInfo) = NULL_PTR;
+
+/***********************************************************************************************************************
+**							ASIL Safety Mechanism Access Layer														  **
+***********************************************************************************************************************/
+#define WDG_REFRESH()                                   WdgM_RefreshTrigger()
+#define SAFETY_MONITOR(condition, errorId)              ((condition) ? (void)0 : SafetyMonitor_ReportError(errorId))
+#define REDUNDANCY_CHECK(valueA, valueB, tolerance)     (((valueA) >= (valueB) - (tolerance)) && ((valueA) <= (valueB) + (tolerance)))
 
 #define	{module_name.upper()}_REG_A_BIT2_7_POSITION			((uint8)2U)
 #define	{module_name.upper()}_REG_A_BIT2_7_MASK				((uint16)0x00FCU)

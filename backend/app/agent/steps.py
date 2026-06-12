@@ -8,6 +8,7 @@ from typing import Any
 
 from app.agent.workflow import Step, WorkflowContext
 from app.integrations.llm_client import LLMClient, LLMOutputFormatError
+from app.integrations.template_loader import TemplateLoader
 
 logger = logging.getLogger(__name__)
 
@@ -496,11 +497,38 @@ class CodeModuleAnalysisStep(Step):
 class CodeSourceGenerationStep(Step):
     """Code Step 2: Generate complete C code files based on module architecture."""
 
-    def __init__(self, template_dir: Path) -> None:
+    def __init__(
+        self,
+        template_dir: Path,
+        template_version: str = "1.0.0",
+        naming_convention: str = "mixed",
+        trace_mapping: dict[str, list[str]] | None = None,
+        asil_level: str = "QM",
+        asil_context: dict | None = None,
+    ) -> None:
         super().__init__(
             name="code_02_code_generation",
             prompt_template="code_02_code_generation.j2",
             template_dir=template_dir,
+        )
+        self.template_version = template_version
+        self.naming_convention = naming_convention
+        self.trace_mapping = trace_mapping or {}
+        self.asil_level = asil_level
+        self.asil_context = asil_context or {}
+
+    def build_prompt(self, context: WorkflowContext) -> str:
+        return TemplateLoader.render_from_dir(
+            self.template_dir,
+            self.prompt_template,
+            document_text=context.document_text,
+            filename=context.filename,
+            previous_outputs=context.previous_outputs,
+            template_version=self.template_version,
+            naming_convention=self.naming_convention,
+            trace_mapping=self.trace_mapping,
+            asil_level=self.asil_level,
+            asil_context=self.asil_context,
         )
 
     def parse_output(self, raw: str) -> dict[str, Any]:
@@ -579,9 +607,23 @@ class CodeSourceGenerationStep(Step):
         return {"files": validated_files}
 
 
-def build_code_generation_steps(template_dir: Path) -> list[Step]:
+def build_code_generation_steps(
+    template_dir: Path,
+    template_version: str = "1.0.0",
+    naming_convention: str = "mixed",
+    trace_mapping: dict[str, list[str]] | None = None,
+    asil_level: str = "QM",
+    asil_context: dict | None = None,
+) -> list[Step]:
     """Return the 2-step code generation pipeline."""
     return [
         CodeModuleAnalysisStep(template_dir),
-        CodeSourceGenerationStep(template_dir),
+        CodeSourceGenerationStep(
+            template_dir,
+            template_version=template_version,
+            naming_convention=naming_convention,
+            trace_mapping=trace_mapping,
+            asil_level=asil_level,
+            asil_context=asil_context,
+        ),
     ]

@@ -8,7 +8,7 @@ Contains template for .h header file
 from datetime import datetime
 
 
-def get_header_content(module_name, author_name, date):
+def get_header_content(module_name, author_name, date, template_version="1.0.0"):
     """Get content for .h header file"""
     current_year = datetime.now().year
     return f'''/***********************************************************************************************************************
@@ -25,6 +25,7 @@ def get_header_content(module_name, author_name, date):
 * $Name______: {module_name}.h$
 * $ArchiVer__: 1$
 * $FcVeri____: 1.0.0$
+* $TemplateVer: {template_version}$
 * $Author____: {author_name}$
 **
 **--------------------------------------------------------------------------------------------------------------------**
@@ -85,6 +86,20 @@ extern	Std_ReturnType	{module_name}_FunctionDescription
 
 #define {module_name.upper()}_CODE_STOP
 #include "{module_name}_MemMap.h"
+
+/***********************************************************************************************************************
+**                        External Interface Access Layer (for Mock testing)                                          **
+***********************************************************************************************************************/
+#define MCAL_SPI_READ(channel, data, length)          Spi_Read(channel, data, length)
+#define MCAL_CAN_WRITE(hth, pduInfo)                  Can_Write(hth, pduInfo)
+#define OS_SET_REL_ALARM(alarm, increment, cycle)     SetRelAlarm(alarm, increment, cycle)
+
+/***********************************************************************************************************************
+**                        ASIL Safety Mechanism Access Layer                                                          **
+***********************************************************************************************************************/
+#define WDG_REFRESH()                                   WdgM_RefreshTrigger()
+#define SAFETY_MONITOR(condition, errorId)              ((condition) ? (void)0 : SafetyMonitor_ReportError(errorId))
+#define REDUNDANCY_CHECK(valueA, valueB, tolerance)     (((valueA) >= (valueB) - (tolerance)) && ((valueA) <= (valueB) + (tolerance)))
 
 #endif /* {module_name.upper()}_H_ */
 

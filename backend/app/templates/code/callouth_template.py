@@ -7,7 +7,7 @@ Contains template for callout header file
 from datetime import datetime
 
 
-def get_callout_header_content(module_name, author_name, date):
+def get_callout_header_content(module_name, author_name, date, template_version="1.0.0"):
     """Get content for callout header file"""
     current_year = datetime.now().year
     current_time = datetime.now().strftime("%H:%M")
@@ -25,6 +25,7 @@ def get_callout_header_content(module_name, author_name, date):
 * $Name______: {module_name}_Callout.h$
 * $ArchiVer__: 1$
 * $FcVeri____: 1.0.0$
+* $TemplateVer: {template_version}$
 * $Author____: {author_name}$
 *
 * $Configuration or generate Date,Time: {current_time} {date} $

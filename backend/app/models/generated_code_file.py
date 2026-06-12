@@ -19,3 +19,5 @@ class GeneratedCodeFile(Base, TenantMixin, TimestampMixin):
     content = Column(Text, nullable=False)
     polarion_trace_id = Column(String(100), nullable=True)
     asil_level = Column(String(10), nullable=True)
+    template_version = Column(String(20), nullable=True)
+    naming_convention = Column(String(20), nullable=True)
