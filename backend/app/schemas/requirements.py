@@ -1,12 +1,14 @@
 from pydantic import BaseModel, Field
 
+_MAX_REQUIREMENT_DESC_LEN = 5_000
+
 
 class RequirementTreeNode(BaseModel):
-    id: str
-    requirement_id: str
-    description: str
-    chapter: str | None = None
-    asil_level: str | None = None
+    id: str = Field(max_length=36)
+    requirement_id: str = Field(max_length=50)
+    description: str = Field(max_length=_MAX_REQUIREMENT_DESC_LEN)
+    chapter: str | None = Field(default=None, max_length=100)
+    asil_level: str | None = Field(default=None, max_length=10)
     children: list["RequirementTreeNode"] = Field(default_factory=list)
 
 

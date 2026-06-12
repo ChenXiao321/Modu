@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
-from app.dependencies import CurrentTenant
+from app.dependencies import CurrentTenant, _validate_document_id
 from app.exceptions import DocumentNotFoundError, DocumentNotReadyError, ModuException
 from app.models.base import get_db
 from app.schemas.design_review import (
@@ -85,7 +85,7 @@ def upload_complete(
 @router.get("/{document_id}/status", response_model=StandardResponse)
 def get_document_status(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DocumentService(db)
@@ -96,7 +96,7 @@ def get_document_status(
 @router.post("/{document_id}/parse", response_model=StandardResponse)
 def trigger_parse(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -109,7 +109,7 @@ def trigger_parse(
 @router.get("/{document_id}/parse/status", response_model=StandardResponse)
 def get_parse_status(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DocumentParseService(db)
@@ -120,7 +120,7 @@ def get_parse_status(
 @router.get("/{document_id}/requirements", response_model=StandardResponse)
 def get_requirements(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DocumentParseService(db)
@@ -131,7 +131,7 @@ def get_requirements(
 @router.get("/{document_id}/requirements/quality", response_model=StandardResponse)
 def get_requirements_quality(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DocumentParseService(db)
@@ -142,7 +142,7 @@ def get_requirements_quality(
 @router.get("/{document_id}/safety-parameters", response_model=StandardResponse)
 def get_safety_parameters(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DocumentParseService(db)
@@ -153,7 +153,7 @@ def get_safety_parameters(
 @router.get("/{document_id}/ocr-results", response_model=StandardResponse)
 def get_ocr_results(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DocumentParseService(db)
@@ -164,7 +164,7 @@ def get_ocr_results(
 @router.post("/{document_id}/ocr-fields/{field_id}/confirm", response_model=StandardResponse)
 def confirm_ocr_field(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     field_id: str,
     req: ConfirmFieldRequest,
     db: Session = Depends(get_db),
@@ -177,7 +177,7 @@ def confirm_ocr_field(
 @router.post("/{document_id}/design", response_model=StandardResponse)
 def trigger_design_document(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -190,7 +190,7 @@ def trigger_design_document(
 @router.get("/{document_id}/design", response_model=StandardResponse)
 def get_design_document(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DesignDocumentService(db)
@@ -230,7 +230,7 @@ def list_documents(
 @router.get("/{document_id}/design-review", response_model=StandardResponse)
 def get_design_review(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DesignReviewService(db)
@@ -241,7 +241,7 @@ def get_design_review(
 @router.post("/{document_id}/design-revisions", response_model=StandardResponse)
 def save_design_revision(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     req: SaveRevisionRequest,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -255,7 +255,7 @@ def save_design_revision(
 @router.get("/{document_id}/design-revisions", response_model=StandardResponse)
 def get_design_revisions(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     section_key: str,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -267,7 +267,7 @@ def get_design_revisions(
 @router.post("/{document_id}/review-comments", response_model=StandardResponse)
 def add_review_comment(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     req: ReviewCommentRequest,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -281,7 +281,7 @@ def add_review_comment(
 @router.get("/{document_id}/review-comments", response_model=StandardResponse)
 def get_review_comments(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     section_key: str,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -293,7 +293,7 @@ def get_review_comments(
 @router.patch("/{document_id}/review-comments/{comment_id}/resolve", response_model=StandardResponse)
 def resolve_review_comment(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     comment_id: str,
     req: ResolveCommentRequest,
     db: Session = Depends(get_db),
@@ -306,7 +306,7 @@ def resolve_review_comment(
 @router.post("/{document_id}/design-review/submit", response_model=StandardResponse)
 def submit_design_review(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = DesignReviewService(db)
@@ -317,7 +317,7 @@ def submit_design_review(
 @router.post("/{document_id}/design-revisions/{revision_id}/rollback", response_model=StandardResponse)
 def rollback_to_revision(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     revision_id: str,
     req: RollbackRevisionRequest,
     db: Session = Depends(get_db),
@@ -334,7 +334,7 @@ def rollback_to_revision(
 @router.get("/{document_id}/fc-requirement", response_model=StandardResponse)
 def get_fc_requirement(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     doc_repo = DocumentRepository(db)
@@ -359,7 +359,7 @@ def get_fc_requirement(
 @router.get("/{document_id}/detailed-design", response_model=StandardResponse)
 def get_detailed_design(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     doc_repo = DocumentRepository(db)
@@ -382,7 +382,7 @@ def get_detailed_design(
 @router.post("/{document_id}/code-generation", response_model=StandardResponse)
 def trigger_code_generation(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> dict:
@@ -395,7 +395,7 @@ def trigger_code_generation(
 @router.get("/{document_id}/code-files", response_model=StandardResponse)
 def get_code_files(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     db: Session = Depends(get_db),
 ) -> dict:
     svc = CodeGenerationService(db)
@@ -406,7 +406,7 @@ def get_code_files(
 @router.get("/{document_id}/code-files/{file_id}", response_model=StandardResponse)
 def get_code_file(
     tenant_id: CurrentTenant,
-    document_id: str,
+    document_id: Annotated[str, Depends(_validate_document_id)],
     file_id: str,
     db: Session = Depends(get_db),
 ) -> dict:

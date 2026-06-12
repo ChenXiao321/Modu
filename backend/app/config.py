@@ -38,5 +38,19 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.2
     llm_max_tokens: int = 8192
 
+    # Code generation configuration
+    code_template_version: str = "1.0.0"
+    code_naming_convention: str = "mixed"  # "mixed" | "camelCase" | "snake_case"
+    code_author_default: str = "AI_Generated"
+
+    # ASIL configuration
+    code_asil_safety_mechanisms: bool = True
+    asil_coverage_targets: dict = {
+        "A": {"statement": 80, "branch": 70},
+        "B": {"statement": 90, "branch": 80, "mcdc": 50},
+        "C": {"statement": 95, "branch": 90, "mcdc": 70},
+        "D": {"statement": 95, "branch": 90, "mcdc": 70},
+    }
+
 
 settings = Settings()

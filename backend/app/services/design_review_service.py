@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 from app.exceptions import (
+    AuthorValidationError,
     CommentAlreadyResolvedError,
     CommentNotFoundError,
     DesignDocumentNotFoundError,
@@ -103,10 +104,20 @@ class DesignReviewService:
         }
 
     def _assert_not_locked(self, tenant_id: int, document_id: str) -> None:
-        """Raise DesignReviewLockedError if the document review has been submitted."""
+        """Raise DesignReviewLockedError if the document is locked (reviewed or code generated)."""
         doc = self.doc_repo.get_by_id(document_id, tenant_id)
-        if doc is not None and doc.pipeline_status == "design_reviewed":
+        if doc is not None and doc.pipeline_status in ("design_reviewed", "code_generated"):
             raise DesignReviewLockedError(document_id)
+
+    @staticmethod
+    def _validate_author(author: str) -> str:
+        """Validate and normalize author. Returns stripped author or raises AuthorValidationError."""
+        stripped = author.strip()
+        if not stripped:
+            raise AuthorValidationError("作者不能为空")
+        if len(stripped) > 100:
+            raise AuthorValidationError("作者长度不能超过 100 个字符")
+        return stripped
 
     def save_revision(
         self, tenant_id: int, document_id: str, section_key: str, revised_content: str, author: str
@@ -115,8 +126,7 @@ class DesignReviewService:
             raise InvalidSectionKeyError(section_key)
         if not revised_content.strip():
             raise InvalidSectionKeyError("revised_content")
-        if not author.strip():
-            raise InvalidSectionKeyError("author")
+        author = self._validate_author(author)
 
         self._assert_not_locked(tenant_id, document_id)
         design = self._get_completed_design(tenant_id, document_id, lock=True)
@@ -130,7 +140,7 @@ class DesignReviewService:
             design_document_id=design.id,
             document_id=document_id,
             section_key=section_key,
-            author=author.strip(),
+            author=author,
             original_content=original_content,
             revised_content=revised_content.strip(),
         )
@@ -155,7 +165,7 @@ class DesignReviewService:
             "section_key": section_key,
             "original_content": original_content,
             "revised_content": revised_content.strip(),
-            "author": author.strip(),
+            "author": author,
             "created_at": revision.created_at.isoformat() if revision.created_at else None,
         }
 
@@ -189,8 +199,7 @@ class DesignReviewService:
             raise InvalidSectionKeyError(section_key)
         if not comment_text.strip():
             raise InvalidSectionKeyError("comment_text")
-        if not author.strip():
-            raise InvalidSectionKeyError("author")
+        author = self._validate_author(author)
 
         self._assert_not_locked(tenant_id, document_id)
         design = self._get_completed_design(tenant_id, document_id)
@@ -201,7 +210,7 @@ class DesignReviewService:
             design_document_id=design.id,
             document_id=document_id,
             section_key=section_key,
-            author=author.strip(),
+            author=author,
             comment_text=comment_text.strip(),
         )
         self.comment_repo.add(comment)
@@ -211,7 +220,7 @@ class DesignReviewService:
         return {
             "id": comment.id,
             "section_key": section_key,
-            "author": author.strip(),
+            "author": author,
             "comment_text": comment_text.strip(),
             "created_at": comment.created_at.isoformat() if comment.created_at else None,
             "resolved_at": None,
@@ -321,8 +330,7 @@ class DesignReviewService:
     def rollback_to_revision(
         self, tenant_id: int, document_id: str, revision_id: str, author: str
     ) -> dict:
-        if not author.strip():
-            raise InvalidSectionKeyError("author")
+        author = self._validate_author(author)
 
         self._assert_not_locked(tenant_id, document_id)
         revision = self.revision_repo.get_by_id_and_document(revision_id, document_id, tenant_id)
@@ -341,7 +349,7 @@ class DesignReviewService:
             design_document_id=design.id,
             document_id=document_id,
             section_key=revision.section_key,
-            author=author.strip(),
+            author=author,
             original_content=current_content,
             revised_content=revision.original_content,
         )
@@ -369,7 +377,7 @@ class DesignReviewService:
             "section_key": revision.section_key,
             "original_content": current_content,
             "revised_content": revision.original_content,
-            "author": author.strip(),
+            "author": author,
             "created_at": rollback_revision.created_at.isoformat() if rollback_revision.created_at else None,
         }
 

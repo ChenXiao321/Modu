@@ -37,7 +37,7 @@ class RevisionResponse(BaseModel):
     section_key: str
     original_content: str
     revised_content: str
-    author: str
+    author: str = Field(max_length=_MAX_AUTHOR_LEN)
     created_at: str
 
 
@@ -47,14 +47,14 @@ class RevisionWithDiffResponse(BaseModel):
     original_content: str
     revised_content: str
     diff: str
-    author: str
+    author: str = Field(max_length=_MAX_AUTHOR_LEN)
     created_at: str
 
 
 class ReviewCommentResponse(BaseModel):
     id: str
     section_key: str
-    author: str
+    author: str = Field(max_length=_MAX_AUTHOR_LEN)
     comment_text: str
     created_at: str
     resolved_at: str | None

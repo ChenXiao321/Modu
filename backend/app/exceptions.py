@@ -189,6 +189,15 @@ class DesignReviewLockedError(ModuException):
         )
 
 
+class AuthorValidationError(ModuException):
+    def __init__(self, reason: str) -> None:
+        super().__init__(
+            error_code="AUTHOR_VALIDATION_FAILED",
+            message=f"作者字段校验失败: {reason}",
+            detail={"reason": reason},
+        )
+
+
 _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "FILE_TOO_LARGE": 413,
     "UNSUPPORTED_FILE_TYPE": 415,
@@ -210,6 +219,7 @@ _EXCEPTION_STATUS_CODES: dict[str, int] = {
     "PIPELINE_STATUS_INVALID": 409,
     "COMMENT_ALREADY_RESOLVED": 409,
     "DESIGN_REVIEW_LOCKED": 409,
+    "AUTHOR_VALIDATION_FAILED": 400,
 }
 
 
